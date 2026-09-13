@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./data/token.json)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Bash(cat .env*)",
+      "Bash(cat data/token.json)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(sudo *)",
+      "Bash(git *)"
+    ]
+  }
+}
