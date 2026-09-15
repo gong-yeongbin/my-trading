@@ -1,0 +1,37 @@
+db_path: data/market.db
+
+kis:
+  env: demo                    # demo: 모의투자 / real: 실전
+  token_cache: data/token.json
+  requests_per_second: 0       # 0 이면 env 기본값 (demo 1.5, real 15)
+  # 앱키는 .env 의 KIS_APP_KEY, KIS_APP_SECRET. 계좌번호는 KIS_ACCOUNT ("12345678-01")
+  balance_poll_seconds: 10     # 장중 보유 종목 갱신 주기
+
+ls:
+  base_url: https://openapi.ls-sec.co.kr:8080
+  ws_url: wss://openapi.ls-sec.co.kr:9443/websocket
+  # 앱키는 .env 의 LS_APP_KEY, LS_APP_SECRET. 없으면 뉴스·지수 줄은 "미연결"
+  token_cache: data/ls_token.json
+
+log:
+  file: data/trader.log
+
+universe:
+  markets: [kospi, kosdaq]
+  group_codes: [ST]
+  exclude_flags: [거래정지, 정리매매, 관리종목, 시장경고, 단기과열, 이상급등, SPAC]
+
+fetch:
+  start_date: "2021-01-01"
+
+strategy:
+  index_ma_days: 20
+  min_turnover: 10000000000
+  turnover_ma_days: 20
+  turnover_ratio_min: 3.0
+  close_to_high_min: 0.99
+  change_min: 0.03
+  change_max: 0.20
+  ma_short_days: 20
+  ma_long_days: 60
+  new_high_days: 20
