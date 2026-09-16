@@ -35,7 +35,7 @@ func New(cfg Config, logger *slog.Logger) *Client {
 		cfg:          cfg,
 		http:         &http.Client{Timeout: 10 * time.Second},
 		log:          logger,
-		retryMin:     5 * time.Second,
+		retryMin:     time.Second,
 		retryMax:     60 * time.Second,
 		pingInterval: 20 * time.Second,
 		pingTimeout:  10 * time.Second,
@@ -63,7 +63,20 @@ type Index struct {
 type Connected struct{}
 type Disconnected struct{ Err error }
 
-func (News) isEvent()         {}
-func (Index) isEvent()        {}
-func (Connected) isEvent()    {}
-func (Disconnected) isEvent() {}
+// Raw 는 아직 전용 파서가 없는 TR 의 수신 본문. ls-probe 가 실제 형식을 볼 때 쓴다.
+type Raw struct {
+	TrCd, TrKey string
+	Body        map[string]any
+}
+
+// SubscribeError 는 구독 응답이 거부일 때 (rsp_cd != "00000").
+type SubscribeError struct {
+	TrCd, Code, Msg string
+}
+
+func (News) isEvent()           {}
+func (Index) isEvent()          {}
+func (Connected) isEvent()      {}
+func (Disconnected) isEvent()   {}
+func (Raw) isEvent()            {}
+func (SubscribeError) isEvent() {}

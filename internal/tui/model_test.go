@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -178,5 +179,38 @@ func TestDataMessagesStored(t *testing.T) {
 	}
 	if len(m.holdings.Rows) != 1 || len(m.logs) != 1 {
 		t.Error("holdings/logs not stored")
+	}
+}
+
+func TestConnectedShowsWaitingUntilData(t *testing.T) {
+	m := sized(t)
+	m = send(m, ConnectedMsg{})
+	v := m.View()
+	if !strings.Contains(v, "연결됨 · 뉴스 대기") || strings.Count(v, "연결됨 · 장외") != 2 || strings.Contains(v, "미연결") {
+		t.Errorf("connected without data should show 대기/장외, not 미연결:\n%s", v)
+	}
+	m = send(m, NewsMsg{Title: "제목"})
+	m = send(m, IndexMsg{Market: "kospi", Value: 2712.4, ChangePct: 0.008})
+	v = m.View()
+	if strings.Contains(v, "뉴스 대기") || strings.Count(v, "연결됨 · 장외") != 1 || !strings.Contains(v, "2,712.40") {
+		t.Errorf("data should replace waiting text:\n%s", v)
+	}
+	m = send(m, DisconnectedMsg{})
+	if strings.Count(m.View(), "미연결") < 3 || strings.Contains(m.View(), "연결됨") {
+		t.Errorf("DisconnectedMsg should show 미연결 everywhere:\n%s", m.View())
+	}
+}
+
+func TestDisconnectedResetsNewsAndIndex(t *testing.T) {
+	m := sized(t)
+	m = send(m, NewsMsg{Title: "제목"})
+	m = send(m, IndexMsg{Market: "kospi", Value: 2712.4, ChangePct: 0.008})
+	m = send(m, IndexMsg{Market: "kosdaq", Value: 782.15, ChangePct: -0.004})
+	m = send(m, DisconnectedMsg{})
+	if m.newsOK || m.kospi.Connected || m.kosdaq.Connected {
+		t.Errorf("DisconnectedMsg should reset: newsOK=%v kospi=%v kosdaq=%v", m.newsOK, m.kospi.Connected, m.kosdaq.Connected)
+	}
+	if strings.Count(m.View(), "미연결") < 3 {
+		t.Errorf("view should show 미연결 for news and both indexes:\n%s", m.View())
 	}
 }

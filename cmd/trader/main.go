@@ -4,16 +4,21 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/gong-yeongbin/my-trading/internal/config"
+	"github.com/gong-yeongbin/my-trading/internal/ls"
 	"github.com/gong-yeongbin/my-trading/internal/tui"
 )
 
 const usage = `사용법:
   trader                 TUI
+  trader ls-probe [초]   LS 실시간 이벤트를 N초(기본 30) 동안 출력 (연결 확인용)
   trader universe        (6단계 계획에서 구현)
   trader fetch           (6단계 계획에서 구현)
   trader watch           (7단계 계획에서 구현)
@@ -41,10 +46,51 @@ func run(args []string) error {
 		return tui.Run(ctx, cfg)
 	}
 	switch args[0] {
+	case "ls-probe":
+		return runLSProbe(ctx, cfg, args[1:])
 	case "universe", "fetch", "watch":
 		return fmt.Errorf("%s 는 아직 구현되지 않았습니다", args[0])
 	default:
 		fmt.Print(usage)
 		return fmt.Errorf("알 수 없는 명령 %q", args[0])
+	}
+}
+
+// runLSProbe 는 LS 웹소켓에 연결해 받은 이벤트를 그대로 찍는다. 로그는 stderr, 이벤트는 stdout.
+func runLSProbe(ctx context.Context, cfg *config.Config, args []string) error {
+	if !cfg.LS.HasAppKey() {
+		return fmt.Errorf("LS_APP_KEY / LS_APP_SECRET 환경변수가 없습니다 (.env 파일을 확인하세요)")
+	}
+	secs := 30
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n <= 0 {
+			return fmt.Errorf("초는 양의 정수여야 합니다: %q", args[0])
+		}
+		secs = n
+	}
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(secs)*time.Second)
+	defer cancel()
+
+	client := ls.New(ls.Config{
+		BaseURL: cfg.LS.BaseURL, WSURL: cfg.LS.WSURL,
+		AppKey: cfg.LS.AppKey, AppSecret: cfg.LS.AppSecret, TokenCache: cfg.LS.TokenCache,
+	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	// TUI 구독(tui.lsSubscriptions)에 더해 장운영정보 JIF 도 구독해 실제 코드 값을 본다 (3단계 이후 화면 표시 후보).
+	subs := []ls.Subscription{
+		{TrCd: "NWS", TrKey: "NWS001"},
+		{TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"},
+		{TrCd: "JIF", TrKey: "1"}, {TrCd: "JIF", TrKey: "2"},
+	}
+	events := make(chan ls.Event, 64)
+	go client.Run(ctx, subs, events)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev := <-events:
+			fmt.Printf("%s %T %+v\n", time.Now().Format("15:04:05"), ev, ev)
+		}
 	}
 }

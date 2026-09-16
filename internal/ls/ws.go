@@ -22,7 +22,11 @@ func (c *Client) Run(ctx context.Context, subs []Subscription, events chan<- Eve
 			return
 		}
 		waitFor, next := c.afterSession(delay, connected)
-		c.log.Warn("ls websocket 끊김", "err", err, "retry_in", waitFor)
+		if connected {
+			c.log.Warn("ls websocket 끊김", "err", err, "retry_in", waitFor)
+		} else {
+			c.log.Warn("ls websocket 연결 실패", "err", err, "retry_in", waitFor)
+		}
 		emit(ctx, events, Disconnected{Err: err})
 		if !sleepCtx(ctx, waitFor) {
 			return
@@ -84,6 +88,7 @@ func (c *Client) session(ctx context.Context, subs []Subscription, events chan<-
 				err := conn.Ping(pingCtx)
 				cancel()
 				if err != nil {
+					c.log.Warn("ls ping 실패", "err", err)
 					conn.CloseNow()
 					return
 				}
@@ -97,6 +102,9 @@ func (c *Client) session(ctx context.Context, subs []Subscription, events chan<-
 			return true, err
 		}
 		if ev, ok := parseMessage(data); ok {
+			if e, isErr := ev.(SubscribeError); isErr {
+				c.log.Warn("ls 구독 거부", "tr_cd", e.TrCd, "rsp_cd", e.Code, "rsp_msg", e.Msg)
+			}
 			emit(ctx, events, ev)
 		}
 	}

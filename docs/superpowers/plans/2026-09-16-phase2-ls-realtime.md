@@ -17,7 +17,7 @@
 - 모듈 경로: `github.com/gong-yeongbin/my-trading`
 - 이 단계에서 추가하는 외부 의존성은 `github.com/coder/websocket` 하나뿐. 테스트 프레임워크 추가 금지.
 - LS 사양(스펙 10.2절): 토큰 `POST {base_url}/oauth2/token` form-urlencoded `appkey`,`appsecretkey`,`grant_type=client_credentials`,`scope=oob` → `access_token`,`expires_in`. 구독 `{"header":{"token","tr_type":"3"},"body":{"tr_cd","tr_key"}}`. 수신 `{"header":{"tr_cd","tr_key"},"body":{…}}`. 뉴스 `NWS`/`NWS001` (`title`). 지수 `IJ_`/`001`(코스피)·`301`(코스닥) (`upcode`,`jisu`,`change`,`drate`,`sign`). `sign` 4·5 면 하락.
-- 재연결: 5초부터 2배씩 최대 60초. 연결 성공 후 끊기면 5초부터 다시. 재연결 후 구독 재전송. 20초마다 ping.
+- 재연결: 1초부터 2배씩 최대 60초 (사용자 결정으로 5초→1초). 연결 성공 후 끊기면 1초부터 다시. 재연결 후 구독 재전송. 20초마다 ping.
 - `ls` 패키지는 `tui`·`config`를 import 하지 않는다. 자기 `Config` 구조체를 받는다.
 - TUI 는 `Disconnected` 를 받으면 뉴스·지수를 `미연결`로 되돌린다. LS 앱키가 없으면 클라이언트를 만들지 않는다.
 - LS 실서버는 테스트에서 호출하지 않는다. 마지막 수동 확인에서만.
@@ -1402,7 +1402,7 @@ go run ./cmd/trader ls-probe 20
 ```
 
 Expected:
-1. stderr 에 `ls websocket 연결 subs=3`.
+1. stderr 에 `ls websocket 연결 subs=5` (NWS, IJ_ 2건, JIF 2건). 구독 거부가 있으면 `ls 구독 거부 tr_cd=… rsp_cd=… rsp_msg=…` 경고가 stderr 에, stdout 에 `ls.SubscribeError` 가 찍힌다 — 그러면 앱키·API 신청 상태 문제.
 2. stdout 에 `ls.Connected {}` 한 줄, 이어서 장중이면 몇 초 안에 `ls.Index {Code:001 Value:2xxx.xx …}` 와 `{Code:301 Value:xxx.xx …}` 가 반복. `001` 값이 수천대, `301` 값이 수백대면 업종코드가 맞다. 반대거나 한쪽만 오면 `internal/tui/ls.go` 의 `lsSubscriptions`·`lsMarkets` 와 `runLSProbe` 의 `subs` 코드를 고친다.
 3. 뉴스는 `ls.News {… Title:…}` 로 온다 (장중 빈도 높음, 장외엔 드묾).
 3a. 장운영정보는 `ls.Raw {TrCd:JIF TrKey:1 Body:map[jangubun:1 jstatus:xx]}` 로 온다. 장 상태가 바뀔 때(09:00 시작, 15:20 동시호가, 15:30 마감 등)만 오므로 그 시각 근처에 돌려야 보인다. 받은 `jstatus` 값과 시각을 기록해 두면 3단계에서 화면 표시(장전/장중/마감)로 쓴다.

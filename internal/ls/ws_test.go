@@ -205,8 +205,8 @@ func TestReconnectResubscribes(t *testing.T) {
 }
 
 func TestBackoffDoublesAndCaps(t *testing.T) {
-	c := &Client{retryMin: 5 * time.Second, retryMax: 60 * time.Second}
-	want := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 40 * time.Second, 60 * time.Second, 60 * time.Second}
+	c := &Client{retryMin: time.Second, retryMax: 60 * time.Second}
+	want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 32 * time.Second, 60 * time.Second, 60 * time.Second}
 	d := c.retryMin
 	for i, w := range want {
 		if d != w {
@@ -217,16 +217,16 @@ func TestBackoffDoublesAndCaps(t *testing.T) {
 }
 
 func TestBackoffResetsAfterConnectedSession(t *testing.T) {
-	c := &Client{retryMin: 5 * time.Second, retryMax: 60 * time.Second}
+	c := &Client{retryMin: time.Second, retryMax: 60 * time.Second}
 	cases := []struct {
 		delay       time.Duration
 		connected   bool
 		wantWaitFor time.Duration
 		wantNext    time.Duration
 	}{
-		{5 * time.Second, false, 5 * time.Second, 10 * time.Second},
-		{10 * time.Second, false, 10 * time.Second, 20 * time.Second},
-		{20 * time.Second, true, 5 * time.Second, 5 * time.Second},
+		{time.Second, false, time.Second, 2 * time.Second},
+		{8 * time.Second, false, 8 * time.Second, 16 * time.Second},
+		{32 * time.Second, true, time.Second, time.Second},
 	}
 	for _, tc := range cases {
 		waitFor, next := c.afterSession(tc.delay, tc.connected)

@@ -375,11 +375,12 @@ type WatchItem struct {
 - 토큰: `POST {base_url}/oauth2/token`, `application/x-www-form-urlencoded`, `appkey`, `appsecretkey`, `grant_type=client_credentials`, `scope=oob`. 응답 `access_token`, `expires_in`(초, 보통 86400). 토큰과 만료 시각을 `token_cache`에 저장하고 만료 30초 전까지 재사용한다.
 - 웹소켓 `ws_url`에 연결한 뒤 구독마다 JSON 한 건: `{"header":{"token":…,"tr_type":"3"},"body":{"tr_cd":…,"tr_key":…}}`. 해지는 `tr_type: "4"`. 20초마다 ping 을 보낸다.
 - 수신 메시지: `{"header":{"tr_cd","tr_key"},"body":{…}}`. `header.tr_cd`로 분기한다. 필드 값은 전부 문자열이다.
+- 구독 응답: `{"header":{"tr_cd","rsp_cd","rsp_msg"}}` (body 없음). `rsp_cd`가 `00000`이 아니면 거부다 — 경고 로그를 남기고 `SubscribeError` 이벤트로 내보낸다 (TUI 는 무시, `ls-probe` 는 출력). 정확한 코드값은 실서버 확인 후 보강한다.
 - 뉴스 제목: `tr_cd: NWS`, `tr_key: NWS001`. body `date`, `time`, `id`, `title`, `code`, `realkey`, `bodysize`. 출처 필드는 없다.
 - 업종 지수: `tr_cd: IJ_`, `tr_key`는 업종코드 — 코스피 종합 `001`, 코스닥 종합 `301` (xingAPI 관례. 2단계 수동 확인에서 값 크기로 검증: 코스피 수천, 코스닥 수백). body `upcode`, `jisu`(지수), `change`(전일 대비), `drate`(등락률 %, 부호 없음), `sign`(1 상한 2 상승 3 보합 4 하한 5 하락), `time`. 등락률 부호는 `sign`이 4·5 이면 음수.
 - 수신 메시지는 `chan Event`(`News`, `Index`, `Connected`, `Disconnected`)로 넘기고 TUI가 `tea.Msg`로 바꾼다. 클라이언트는 TUI를 모른다.
-- 연결이 끊기면 5초 후 재연결하고 실패할 때마다 간격을 2배로 늘려 최대 60초까지 기다린다. 재연결 후 구독을 다시 보낸다. 연결·끊김·재연결을 `*slog.Logger`로 남긴다 (파일 로거는 3단계, 그전엔 폐기 로거).
-- 앱키가 없으면 클라이언트를 만들지 않고 TUI는 `미연결`로 표시한다. TUI 는 `Disconnected` 를 받으면 뉴스·지수를 `미연결`로 되돌린다.
+- 연결이 끊기면 1초 후 재연결하고 실패할 때마다 간격을 2배로 늘려 최대 60초까지 기다린다 (거부·장애 시 서버를 두드리지 않기 위해). 연결에 성공했던 뒤에는 1초로 되돌린다. 재연결 후 구독을 다시 보낸다. 연결·끊김·재연결을 `*slog.Logger`로 남긴다 (파일 로거는 3단계, 그전엔 폐기 로거).
+- 앱키가 없으면 클라이언트를 만들지 않고 TUI는 `미연결`로 표시한다. TUI 는 `Connected` 를 받으면 데이터가 오기 전까지 뉴스 줄 `연결됨 · 뉴스 대기`, 지수 줄 `연결됨 · 장외`로, `Disconnected` 를 받으면 전부 `미연결`로 표시한다.
 - 장운영정보 `JIF`(`tr_key` 1 코스피, 2 코스닥; body `jangubun`, `jstatus`)는 2단계 `ls-probe` 에서 구독해 실제 상태 코드를 확인하고, 이후 단계에서 하단 줄에 장전/장중/마감 표시와 잔고 폴링 시간대 판정에 쓴다.
 
 ### 10.3 로그 파일

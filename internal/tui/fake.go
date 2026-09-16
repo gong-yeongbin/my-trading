@@ -6,13 +6,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// fakeMessages 는 1단계 화면 확인용 가짜 데이터다.
-// 2단계(뉴스·지수), 3단계(로그), 7단계(관심종목), 8단계(보유종목)에서 실데이터로 바꾸며 해당 항목을 지우고, 다 지워지면 이 파일을 삭제한다.
+// fakeMessages 는 아직 실데이터가 없는 패널의 화면 확인용 가짜 데이터다.
+// 3단계(로그), 7단계(관심종목), 8단계(보유종목)에서 실데이터로 바꾸며 해당 항목을 지우고, 다 지워지면 이 파일을 삭제한다.
 func fakeMessages(now time.Time) []tea.Msg {
 	return []tea.Msg{
-		NewsMsg{Source: "연합뉴스", Title: "삼성전자, 3분기 파운드리 수주 확대 전망"},
-		IndexMsg{Market: "kospi", Value: 2712.40, ChangePct: 0.008},
-		IndexMsg{Market: "kosdaq", Value: 782.15, ChangePct: -0.004},
 		WatchMsg{AsOf: "09-12", Filter: MarketFilter{Kospi: "진입가능", Kosdaq: "차단"}, Rows: []WatchRow{
 			{Name: "삼성전자", Market: "코스피", PrevClose: 71200, MinClose: 73400, MinChangePct: 0.031, MinVolume: 2140000},
 			{Name: "SK하이닉스", Market: "코스피", PrevClose: 182000, MinClose: 188100, MinChangePct: 0.034, MinVolume: 620000},

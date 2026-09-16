@@ -71,3 +71,9 @@ type HoldingsMsg struct {
 type LogMsg struct {
 	Lines []LogLine
 }
+
+// ConnectedMsg 는 실시간 연결(LS)이 되어 구독까지 끝났을 때. 데이터가 오기 전까지 "연결됨 · 대기" 로 보인다.
+type ConnectedMsg struct{}
+
+// DisconnectedMsg 는 실시간 연결(LS)이 끊겼을 때. 뉴스·지수를 미연결로 되돌린다.
+type DisconnectedMsg struct{}

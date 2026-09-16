@@ -48,6 +48,7 @@ type Model struct {
 	cursor     [panelCount]int
 	offset     [panelCount]int
 
+	linkOK   bool // LS 연결·구독 완료 여부
 	news     NewsMsg
 	newsOK   bool
 	kospi    indexQuote
@@ -105,6 +106,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if panelLog == m.active {
 			m.clampScroll()
 		}
+	case ConnectedMsg:
+		m.linkOK = true
+	case DisconnectedMsg:
+		m.linkOK = false
+		m.newsOK = false
+		m.kospi.Connected = false
+		m.kosdaq.Connected = false
 	}
 	return m, nil
 }

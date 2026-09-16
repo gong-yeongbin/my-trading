@@ -31,17 +31,27 @@ func (m Model) View() string {
 
 func (m Model) headerLeft() string {
 	if !m.newsOK {
+		if m.linkOK {
+			return " 연결됨 · 뉴스 대기"
+		}
 		return " 미연결"
+	}
+	if m.news.Source == "" {
+		return " " + m.news.Title
 	}
 	return fmt.Sprintf(" [%s] %s", m.news.Source, m.news.Title)
 }
 
 func (m Model) footerLeft() string {
-	return " 코스피 " + fmtIndex(m.kospi) + "   코스닥 " + fmtIndex(m.kosdaq)
+	return " 코스피 " + fmtIndex(m.kospi, m.linkOK) + "   코스닥 " + fmtIndex(m.kosdaq, m.linkOK)
 }
 
-func fmtIndex(q indexQuote) string {
+// fmtIndex 는 지수 한 칸. 값이 없을 때 연결은 되어 있으면 장외(데이터 대기), 아니면 미연결.
+func fmtIndex(q indexQuote, linkOK bool) string {
 	if !q.Connected {
+		if linkOK {
+			return "연결됨 · 장외"
+		}
 		return "미연결"
 	}
 	arrow := "▲"

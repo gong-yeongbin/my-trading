@@ -150,3 +150,16 @@ func TestFormatHelpers(t *testing.T) {
 		t.Errorf("spread = %q", got)
 	}
 }
+
+func TestViewNewsWithoutSource(t *testing.T) {
+	m := sized(t)
+	m = send(m, NewsMsg{Title: "출처 없는 제목"})
+	v := m.View()
+	if !strings.Contains(v, " 출처 없는 제목") || strings.Contains(v, "[] 출처") {
+		t.Errorf("news without source should render title only:\n%s", v)
+	}
+	m = send(m, NewsMsg{Source: "연합뉴스", Title: "출처 있는 제목"})
+	if !strings.Contains(m.View(), "[연합뉴스] 출처 있는 제목") {
+		t.Errorf("news with source should render [source] title:\n%s", m.View())
+	}
+}
