@@ -69,6 +69,19 @@ func parseMessage(data []byte) (Event, bool) {
 			ChangePct: pct / 100,
 			Time:      field(m.Body, "time"),
 		}, true
+	case "JIF":
+		code := field(m.Body, "jstatus")
+		if code == "" {
+			return nil, false
+		}
+		market := field(m.Body, "jangubun")
+		switch market {
+		case "1":
+			market = "kospi"
+		case "2":
+			market = "kosdaq"
+		}
+		return MarketStatus{Market: market, Code: code}, true
 	default:
 		if m.Header.TrCd == "" {
 			return nil, false

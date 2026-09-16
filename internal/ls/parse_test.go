@@ -119,13 +119,39 @@ func TestParseIgnoresOthers(t *testing.T) {
 }
 
 func TestParseUnknownTRAsRaw(t *testing.T) {
-	ev, ok := parseMessage([]byte(`{"header":{"tr_cd":"JIF","tr_key":"1"},"body":{"jangubun":"1","jstatus":"21"}}`))
+	ev, ok := parseMessage([]byte(`{"header":{"tr_cd":"S3_","tr_key":"005930"},"body":{"price":"71200"}}`))
 	if !ok {
 		t.Fatal("expected Raw event")
 	}
 	r, isRaw := ev.(Raw)
-	if !isRaw || r.TrCd != "JIF" || r.TrKey != "1" || r.Body["jstatus"] != "21" {
+	if !isRaw || r.TrCd != "S3_" || r.TrKey != "005930" || r.Body["price"] != "71200" {
 		t.Errorf("raw = %+v", ev)
+	}
+}
+
+func TestParseJIF(t *testing.T) {
+	cases := []struct {
+		key        string
+		body       string
+		wantMarket string
+		wantCode   string
+	}{
+		{"1", `{"jangubun":"1","jstatus":"21"}`, "kospi", "21"},
+		{"2", `{"jangubun":"2","jstatus":"41"}`, "kosdaq", "41"},
+		{"5", `{"jangubun":"5","jstatus":"21"}`, "5", "21"}, // 모르는 시장은 원문
+	}
+	for _, tc := range cases {
+		ev, ok := parseMessage([]byte(`{"header":{"tr_cd":"JIF","tr_key":"` + tc.key + `"},"body":` + tc.body + `}`))
+		if !ok {
+			t.Fatalf("expected MarketStatus for %s", tc.body)
+		}
+		ms, isMS := ev.(MarketStatus)
+		if !isMS || ms.Market != tc.wantMarket || ms.Code != tc.wantCode {
+			t.Errorf("parse %s = %+v", tc.body, ev)
+		}
+	}
+	if _, ok := parseMessage([]byte(`{"header":{"tr_cd":"JIF","tr_key":"1"},"body":{"jangubun":"1"}}`)); ok {
+		t.Error("JIF without jstatus should be ignored")
 	}
 }
 

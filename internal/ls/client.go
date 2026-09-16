@@ -63,6 +63,13 @@ type Index struct {
 type Connected struct{}
 type Disconnected struct{ Err error }
 
+// MarketStatus 는 JIF 장운영정보 한 건. Market 은 kospi / kosdaq / (모르면 jangubun 원문). Code 는 jstatus 코드.
+type MarketStatus struct {
+	Market, Code string
+}
+
+func (MarketStatus) isEvent() {}
+
 // Raw 는 아직 전용 파서가 없는 TR 의 수신 본문. ls-probe 가 실제 형식을 볼 때 쓴다.
 type Raw struct {
 	TrCd, TrKey string
