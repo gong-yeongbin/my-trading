@@ -59,7 +59,7 @@ my-trading/
   docs/superpowers/specs/     설계 문서
 ```
 
-외부 의존성은 SQLite 드라이버, YAML 파서(`gopkg.in/yaml.v3`), 마스터 파일 CP949 디코딩용 `golang.org/x/text`, TUI용 `charmbracelet/bubbletea`·`bubbles`·`lipgloss`, LS 웹소켓용 `nhooyr.io/websocket`으로 제한한다. `data/`, `.env`는 `.gitignore`에 넣는다.
+외부 의존성은 SQLite 드라이버, YAML 파서(`gopkg.in/yaml.v3`), 마스터 파일 CP949 디코딩용 `golang.org/x/text`, TUI용 `charmbracelet/bubbletea`·`bubbles`·`lipgloss`, LS 웹소켓용 `github.com/coder/websocket`(구 nhooyr.io/websocket)으로 제한한다. `data/`, `.env`는 `.gitignore`에 넣는다.
 
 ## 4. CLI
 
@@ -351,10 +351,10 @@ type WatchItem struct {
 
 | 영역 | 내용 | 출처 | 갱신 |
 |---|---|---|---|
-| 상단 | 최신 뉴스 한 건 `[출처] 제목`. 오른쪽 끝 현재 시각 | `ls` (`NWS`) | 새 뉴스 수신 즉시 교체. 없으면 최근 20건을 5초마다 순환. 시계는 1초 |
+| 상단 | 최신 뉴스 한 건. LS `NWS`에는 출처 필드가 없어 제목만 표시 (출처가 있으면 `[출처] 제목`). 오른쪽 끝 현재 시각 | `ls` (`NWS`) | 새 뉴스 수신 즉시 교체. 없으면 최근 20건을 5초마다 순환. 시계는 1초 |
 | 왼쪽 메뉴 | 관심종목 / 보유종목 / 로그 | | |
 | 가운데 | 선택한 패널 (아래) | | |
-| 하단 | 코스피·코스닥 현재 지수와 등락률. 오른쪽 끝 키 안내 | `ls` (`IJ`) | 수신 즉시. 미연결이면 전일 종가와 `(전일)` 표시 |
+| 하단 | 코스피·코스닥 현재 지수와 등락률. 오른쪽 끝 키 안내 | `ls` (`IJ_`) | 수신 즉시. 미연결이면 `미연결`. 7단계(SQLite 지수 봉)부터는 전일 종가와 `(전일)` 표시 |
 
 패널:
 
@@ -370,15 +370,17 @@ type WatchItem struct {
 
 ### 10.2 LS증권 실시간 클라이언트 (internal/ls)
 
-공식 포털(`openapi.ls-sec.co.kr`)의 howto-sample 에서 확인한 사양을 따른다. 표시가 없는 항목은 포털에서 확인한다.
+포털 howto-sample 과 공개 TR 카탈로그(LsApiHelper `specs/blocks.json`)에서 확인한 사양. `IJ_`의 `tr_key`만 실서버로 검증한다.
 
-- 토큰: `POST {base_url}/oauth2/token`, `grant_type=client_credentials`, `appkey`, `appsecretkey` (경로·필드명 포털 확인). 응답 토큰과 만료 일시를 `token_cache`에 저장하고 만료 전이면 재사용한다.
-- 웹소켓 `ws_url`에 연결한 뒤 구독 메시지를 JSON으로 보낸다: `header: {token, tr_type: "3"}`, `body: {tr_cd, tr_key}`. 구독 해지는 `tr_type: "4"`.
-- 뉴스 제목: `tr_cd: NWS`, `tr_key: NWS001`. 수신 필드에서 출처·제목을 꺼낸다 (필드명 포털 확인).
-- 업종 지수: `tr_cd: IJ`, `tr_key`는 코스피 `001`, 코스닥 `301` (포털 확인). 현재 지수와 전일 대비 등락률을 꺼낸다.
-- 수신 메시지는 `chan Event`로 넘기고 TUI가 `tea.Msg`로 바꾼다. 클라이언트는 TUI를 모른다.
-- 연결이 끊기면 5초 후 재연결하고 실패할 때마다 간격을 2배로 늘려 최대 60초까지 기다린다. 연결·끊김·재연결을 로그에 남긴다.
-- 앱키가 없으면 클라이언트를 만들지 않고 TUI는 `미연결`로 표시한다.
+- 토큰: `POST {base_url}/oauth2/token`, `application/x-www-form-urlencoded`, `appkey`, `appsecretkey`, `grant_type=client_credentials`, `scope=oob`. 응답 `access_token`, `expires_in`(초, 보통 86400). 토큰과 만료 시각을 `token_cache`에 저장하고 만료 30초 전까지 재사용한다.
+- 웹소켓 `ws_url`에 연결한 뒤 구독마다 JSON 한 건: `{"header":{"token":…,"tr_type":"3"},"body":{"tr_cd":…,"tr_key":…}}`. 해지는 `tr_type: "4"`. 20초마다 ping 을 보낸다.
+- 수신 메시지: `{"header":{"tr_cd","tr_key"},"body":{…}}`. `header.tr_cd`로 분기한다. 필드 값은 전부 문자열이다.
+- 뉴스 제목: `tr_cd: NWS`, `tr_key: NWS001`. body `date`, `time`, `id`, `title`, `code`, `realkey`, `bodysize`. 출처 필드는 없다.
+- 업종 지수: `tr_cd: IJ_`, `tr_key`는 업종코드 — 코스피 종합 `001`, 코스닥 종합 `301` (xingAPI 관례. 2단계 수동 확인에서 값 크기로 검증: 코스피 수천, 코스닥 수백). body `upcode`, `jisu`(지수), `change`(전일 대비), `drate`(등락률 %, 부호 없음), `sign`(1 상한 2 상승 3 보합 4 하한 5 하락), `time`. 등락률 부호는 `sign`이 4·5 이면 음수.
+- 수신 메시지는 `chan Event`(`News`, `Index`, `Connected`, `Disconnected`)로 넘기고 TUI가 `tea.Msg`로 바꾼다. 클라이언트는 TUI를 모른다.
+- 연결이 끊기면 5초 후 재연결하고 실패할 때마다 간격을 2배로 늘려 최대 60초까지 기다린다. 재연결 후 구독을 다시 보낸다. 연결·끊김·재연결을 `*slog.Logger`로 남긴다 (파일 로거는 3단계, 그전엔 폐기 로거).
+- 앱키가 없으면 클라이언트를 만들지 않고 TUI는 `미연결`로 표시한다. TUI 는 `Disconnected` 를 받으면 뉴스·지수를 `미연결`로 되돌린다.
+- 장운영정보 `JIF`(`tr_key` 1 코스피, 2 코스닥; body `jangubun`, `jstatus`)는 2단계 `ls-probe` 에서 구독해 실제 상태 코드를 확인하고, 이후 단계에서 하단 줄에 장전/장중/마감 표시와 잔고 폴링 시간대 판정에 쓴다.
 
 ### 10.3 로그 파일
 
@@ -389,7 +391,7 @@ type WatchItem struct {
 
 ### 10.4 테스트
 
-각 패널 모델에 메시지를 보내 상태 전이를 검증한다 (메뉴 선택 → 패널 전환, 뉴스 수신 → 상단 줄 교체, 지수 수신 → 하단 줄 갱신, 잔고 응답 → 표 갱신, 연결 끊김 → `미연결` 표시). 렌더링 문자열은 핵심 문구 포함 여부만 확인한다.
+각 패널 모델에 메시지를 보내 상태 전이를 검증한다 (메뉴 선택 → 패널 전환, 뉴스 수신 → 상단 줄 교체, 지수 수신 → 하단 줄 갱신, 잔고 응답 → 표 갱신, `DisconnectedMsg` → `미연결` 표시). 렌더링 문자열은 핵심 문구 포함 여부만 확인한다.
 
 ## 11. 에러 처리
 
