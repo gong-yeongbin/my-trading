@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/gong-yeongbin/my-trading/internal/market"
 )
 
 func TestViewHasExactHeightAndWidth(t *testing.T) {
@@ -161,5 +163,14 @@ func TestViewNewsWithoutSource(t *testing.T) {
 	m = send(m, NewsMsg{Source: "연합뉴스", Title: "출처 있는 제목"})
 	if !strings.Contains(m.View(), "[연합뉴스] 출처 있는 제목") {
 		t.Errorf("news with source should render [source] title:\n%s", m.View())
+	}
+}
+
+func TestViewFooterStatusPrefix(t *testing.T) {
+	m := sized(t)
+	m = send(m, tickMsg(time.Date(2026, 9, 19, 10, 0, 0, 0, market.KST))) // 토
+	m = send(m, IndexMsg{Market: "kospi", Value: 2712.4, ChangePct: 0.008})
+	if !strings.Contains(m.View(), " [휴장] 코스피 2,712.40 ▲+0.8%") {
+		t.Errorf("footer should start with status:\n%s", m.View())
 	}
 }

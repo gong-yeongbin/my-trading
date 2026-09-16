@@ -3,42 +3,67 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gong-yeongbin/my-trading/internal/config"
+	"github.com/gong-yeongbin/my-trading/internal/logfile"
 	"github.com/gong-yeongbin/my-trading/internal/ls"
+	"github.com/gong-yeongbin/my-trading/internal/market"
 )
 
 // Run 은 전체 화면 TUI 를 띄우고 종료될 때까지 막는다.
-// LS 앱키가 있으면 실시간 뉴스·지수를 구독해 화면에 밀어 넣는다. 로그는 3단계에서 파일로 보낸다.
+// 로그는 cfg.Log.File 에 쓰고 로그 패널이 그 파일을 따라간다. LS 앱키가 있으면 실시간 뉴스·지수·장운영정보를 구독한다.
 func Run(ctx context.Context, cfg *config.Config) error {
 	// 취소 가능한 자식 컨텍스트: Run 안에서 시작하는 고루틴들이 q 로 TUI 종료 시 함께 멈추도록.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	p := tea.NewProgram(New(), tea.WithAltScreen(), tea.WithContext(ctx))
 
+	// 로그 파일. 못 열면 TUI 는 계속 뜨고 로그 패널에 오류 한 줄만 보인다 (스펙 11).
+	logger, closer, err := logfile.Open(cfg.Log.File)
+	if err != nil {
+		logger = slog.New(slog.DiscardHandler)
+		initial := []logfile.Line{{Time: time.Now(), Level: "ERROR", Kind: "오류", Msg: "로그 파일 열기 실패: " + err.Error()}}
+		go p.Send(LogMsg{Lines: toLogLines(initial)})
+	} else {
+		initial, size, _ := logfile.Tail(cfg.Log.File, logKeep)
+		go watchLog(ctx, logfile.NewReader(cfg.Log.File, size), initial, time.Second, p.Send)
+	}
+
 	if cfg.LS.HasAppKey() {
 		client := ls.New(ls.Config{
 			BaseURL: cfg.LS.BaseURL, WSURL: cfg.LS.WSURL,
 			AppKey: cfg.LS.AppKey, AppSecret: cfg.LS.AppSecret, TokenCache: cfg.LS.TokenCache,
-		}, slog.New(slog.DiscardHandler))
+		}, logger.With("kind", "연결"))
 		events := make(chan ls.Event, 64)
 		go client.Run(ctx, lsSubscriptions, events)
+		indexLog := logger.With("kind", "지수")
 		go func() {
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case ev := <-events:
+					if ms, ok := ev.(ls.MarketStatus); ok {
+						status, known := market.FromJIF(ms.Code)
+						indexLog.Info(fmt.Sprintf("%s 장운영 %s", ms.Market, ms.Code), "status", status, "known", known)
+						if known {
+							p.Send(MarketStatusMsg{Status: status})
+						}
+						continue
+					}
 					if msg := lsToMsg(ev); msg != nil {
 						p.Send(msg)
 					}
 				}
 			}
 		}()
+	} else {
+		logger.With("kind", "연결").Warn("LS 앱키 없음, 실시간 뉴스·지수 미연결")
 	}
 
 	go func() {
@@ -46,7 +71,11 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			p.Send(msg)
 		}
 	}()
-	_, err := p.Run()
+	_, err = p.Run()
+	cancel()
+	if closer != nil {
+		closer.Close()
+	}
 	if errors.Is(err, tea.ErrProgramKilled) && ctx.Err() != nil {
 		return nil // Ctrl+C 로 컨텍스트가 취소된 정상 종료
 	}

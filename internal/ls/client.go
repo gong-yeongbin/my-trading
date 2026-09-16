@@ -42,7 +42,7 @@ func New(cfg Config, logger *slog.Logger) *Client {
 	}
 }
 
-// Event 는 Run 이 채널로 내보내는 값. News, Index, Connected, Disconnected 중 하나.
+// Event 는 Run 이 채널로 내보내는 값. News, Index, MarketStatus, SubscribeError, Raw, Connected, Disconnected 중 하나.
 type Event interface{ isEvent() }
 
 // News 는 NWS 실시간 뉴스 제목 한 건. 출처 필드는 API 에 없다.

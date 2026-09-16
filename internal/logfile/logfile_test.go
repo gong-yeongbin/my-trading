@@ -1,6 +1,7 @@
 package logfile
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,20 @@ func TestParseLineRejectsGarbage(t *testing.T) {
 	}
 }
 
+func TestParseLineStripsControlChars(t *testing.T) {
+	l, ok := ParseLine([]byte(`{"time":"2026-09-16T10:00:00+09:00","level":"INFO","msg":"a\nb\tc","err":"x\ny"}`))
+	if !ok || l.Msg != "a b c err=x y" {
+		t.Errorf("msg = %q ok=%v", l.Msg, ok)
+	}
+}
+
+func TestParseLineNumberNotExponent(t *testing.T) {
+	l, ok := ParseLine([]byte(`{"time":"2026-09-16T10:00:00+09:00","level":"INFO","msg":"수집","volume":2391000}`))
+	if !ok || l.Msg != "수집 volume=2391000" {
+		t.Errorf("msg = %q ok=%v", l.Msg, ok)
+	}
+}
+
 func writeLines(t *testing.T, path string, lines ...string) {
 	t.Helper()
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
@@ -106,6 +121,52 @@ func TestTailLastN(t *testing.T) {
 	}
 	if info, _ := os.Stat(path); size != info.Size() {
 		t.Errorf("size = %d, want %d", size, info.Size())
+	}
+}
+
+func TestTailIgnoresPartialTrailingLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.log")
+	writeLines(t, path, line("a"), line("b"))
+	fragment := `{"time":"2026-09-16T10:00:00+09:00","level":"INFO","msg":"c"`
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(fragment); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	lines, size, err := Tail(path, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, l := range lines {
+		got = append(got, l.Msg)
+	}
+	if strings.Join(got, ",") != "a,b" {
+		t.Errorf("tail = %v", got)
+	}
+	b, _ := os.ReadFile(path)
+	wantSize := int64(bytes.LastIndexByte(b, '\n') + 1)
+	if size != wantSize {
+		t.Errorf("size = %d, want %d", size, wantSize)
+	}
+
+	r := NewReader(path, size)
+	f, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`,"kind":"수집"}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	more, err := r.Next()
+	if err != nil || len(more) != 1 || more[0].Msg != "c" {
+		t.Fatalf("completed line = %+v %v", more, err)
 	}
 }
 

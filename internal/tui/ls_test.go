@@ -20,6 +20,7 @@ func TestLSToMsg(t *testing.T) {
 		{"connected", ls.Connected{}, ConnectedMsg{}},
 		{"disconnected", ls.Disconnected{Err: errors.New("x")}, DisconnectedMsg{}},
 		{"subscribe-error", ls.SubscribeError{TrCd: "NWS", Code: "E001"}, nil},
+		{"market-status", ls.MarketStatus{Market: "kospi", Code: "21"}, nil}, // run.go 가 직접 처리
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -32,7 +33,11 @@ func TestLSToMsg(t *testing.T) {
 }
 
 func TestLSSubscriptions(t *testing.T) {
-	want := []ls.Subscription{{TrCd: "NWS", TrKey: "NWS001"}, {TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"}}
+	want := []ls.Subscription{
+		{TrCd: "NWS", TrKey: "NWS001"},
+		{TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"},
+		{TrCd: "JIF", TrKey: "1"}, {TrCd: "JIF", TrKey: "2"},
+	}
 	if len(lsSubscriptions) != len(want) {
 		t.Fatalf("subs = %v", lsSubscriptions)
 	}

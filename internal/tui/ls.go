@@ -7,7 +7,11 @@ import (
 )
 
 // lsSubscriptions 는 TUI 가 구독하는 LS 실시간 TR. 업종코드 001 코스피 종합, 301 코스닥 종합.
-var lsSubscriptions = []ls.Subscription{{TrCd: "NWS", TrKey: "NWS001"}, {TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"}}
+var lsSubscriptions = []ls.Subscription{
+	{TrCd: "NWS", TrKey: "NWS001"},
+	{TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"},
+	{TrCd: "JIF", TrKey: "1"}, {TrCd: "JIF", TrKey: "2"},
+}
 
 var lsMarkets = map[string]string{"001": "kospi", "301": "kosdaq"}
 

@@ -72,6 +72,11 @@ type LogMsg struct {
 	Lines []LogLine
 }
 
+// MarketStatusMsg 는 LS 장운영정보를 문구로 바꾼 것 (장전/장중/동시호가/장마감/시간외). 그날 안에서는 시계 판정보다 우선한다.
+type MarketStatusMsg struct {
+	Status string
+}
+
 // ConnectedMsg 는 실시간 연결(LS)이 되어 구독까지 끝났을 때. 데이터가 오기 전까지 "연결됨 · 대기" 로 보인다.
 type ConnectedMsg struct{}
 

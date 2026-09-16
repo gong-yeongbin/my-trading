@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gong-yeongbin/my-trading/internal/market"
 )
 
 func sized(t *testing.T) Model {
@@ -212,5 +214,28 @@ func TestDisconnectedResetsNewsAndIndex(t *testing.T) {
 	}
 	if strings.Count(m.View(), "미연결") < 3 {
 		t.Errorf("view should show 미연결 for news and both indexes:\n%s", m.View())
+	}
+}
+
+func TestMarketStatusFromClockAndJIF(t *testing.T) {
+	m := sized(t)
+	tue1000 := time.Date(2026, 9, 15, 10, 0, 0, 0, market.KST)
+	m = send(m, tickMsg(tue1000))
+	if !strings.Contains(m.View(), "[장중]") {
+		t.Errorf("clock-based status missing:\n%s", m.View())
+	}
+	m = send(m, MarketStatusMsg{Status: "동시호가"})
+	if !strings.Contains(m.View(), "[동시호가]") {
+		t.Errorf("JIF status should override:\n%s", m.View())
+	}
+	// 같은 날 시계가 흘러도 JIF 값 유지
+	m = send(m, tickMsg(tue1000.Add(time.Hour)))
+	if !strings.Contains(m.View(), "[동시호가]") {
+		t.Errorf("JIF status should persist within the day:\n%s", m.View())
+	}
+	// 날짜가 바뀌면 시계 기준으로 복귀
+	m = send(m, tickMsg(tue1000.Add(24*time.Hour)))
+	if !strings.Contains(m.View(), "[장중]") {
+		t.Errorf("next day should fall back to clock:\n%s", m.View())
 	}
 }

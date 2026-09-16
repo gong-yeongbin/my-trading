@@ -4,6 +4,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gong-yeongbin/my-trading/internal/market"
 )
 
 type focus int
@@ -48,14 +50,16 @@ type Model struct {
 	cursor     [panelCount]int
 	offset     [panelCount]int
 
-	linkOK   bool // LS 연결·구독 완료 여부
-	news     NewsMsg
-	newsOK   bool
-	kospi    indexQuote
-	kosdaq   indexQuote
-	watch    WatchMsg
-	holdings HoldingsMsg
-	logs     []LogLine
+	linkOK    bool      // LS 연결·구독 완료 여부
+	jifStatus string    // JIF 로 받은 장 상태. 비어 있으면 시계 기준
+	jifAt     time.Time // jifStatus 를 받은 시각
+	news      NewsMsg
+	newsOK    bool
+	kospi     indexQuote
+	kosdaq    indexQuote
+	watch     WatchMsg
+	holdings  HoldingsMsg
+	logs      []LogLine
 }
 
 func New() Model {
@@ -106,6 +110,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if panelLog == m.active {
 			m.clampScroll()
 		}
+	case MarketStatusMsg:
+		m.jifStatus, m.jifAt = msg.Status, m.now
 	case ConnectedMsg:
 		m.linkOK = true
 	case DisconnectedMsg:
@@ -177,6 +183,17 @@ func (m *Model) clampScroll() {
 	if m.offset[p] < 0 {
 		m.offset[p] = 0
 	}
+}
+
+// marketStatus 는 하단 줄에 붙일 장 상태. 같은 날 JIF 를 받았으면 그 값, 아니면 시계 기준.
+func (m Model) marketStatus() string {
+	if m.jifStatus != "" {
+		a, b := m.jifAt.In(market.KST), m.now.In(market.KST)
+		if a.Year() == b.Year() && a.YearDay() == b.YearDay() {
+			return m.jifStatus
+		}
+	}
+	return market.Status(m.now)
 }
 
 // View 는 view.go 에 있다.

@@ -76,7 +76,7 @@ func runLSProbe(ctx context.Context, cfg *config.Config, args []string) error {
 		BaseURL: cfg.LS.BaseURL, WSURL: cfg.LS.WSURL,
 		AppKey: cfg.LS.AppKey, AppSecret: cfg.LS.AppSecret, TokenCache: cfg.LS.TokenCache,
 	}, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	// TUI 구독(tui.lsSubscriptions)에 더해 장운영정보 JIF 도 구독해 실제 코드 값을 본다 (3단계 이후 화면 표시 후보).
+	// TUI 와 같은 구독 목록(뉴스·업종지수·장운영정보 JIF)을 그대로 써서 실제 수신 값을 본다.
 	subs := []ls.Subscription{
 		{TrCd: "NWS", TrKey: "NWS001"},
 		{TrCd: "IJ_", TrKey: "001"}, {TrCd: "IJ_", TrKey: "301"},

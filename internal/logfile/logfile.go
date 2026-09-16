@@ -39,7 +39,9 @@ type Line struct {
 // ParseLine 은 JSON 한 줄을 Line 으로 바꾼다. time 이나 msg 가 없거나 깨졌으면 false.
 func ParseLine(b []byte) (Line, bool) {
 	var raw map[string]any
-	if err := json.Unmarshal(b, &raw); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
 		return Line{}, false
 	}
 	ts, _ := raw["time"].(string)
@@ -64,7 +66,13 @@ func ParseLine(b []byte) (Line, bool) {
 	for _, k := range keys {
 		fmt.Fprintf(&sb, " %s=%v", k, raw[k])
 	}
-	return Line{Time: t, Level: level, Kind: kind, Msg: sb.String()}, true
+	clean := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, sb.String())
+	return Line{Time: t, Level: level, Kind: kind, Msg: clean}, true
 }
 
 // Tail 은 파일의 마지막 n 줄(파싱되는 것만)을 파일 순서로 돌려주고, 파일 크기도 돌려준다. 파일이 없으면 빈 결과.
@@ -76,11 +84,12 @@ func Tail(path string, n int) ([]Line, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	lines := parseLines(b)
+	end := bytes.LastIndexByte(b, '\n') + 1
+	lines := parseLines(b[:end])
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	return lines, int64(len(b)), nil
+	return lines, int64(end), nil
 }
 
 // Reader 는 offset 이후로 늘어난 부분만 읽는다. 개행으로 끝나지 않은 조각은 다음 호출까지 보류한다.
