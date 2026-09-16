@@ -5,8 +5,8 @@
 # 비밀·로컬 데이터
 .env
 .env.*
-data/
-out/
+/data/
+/out/
 
 # Go 빌드 산출물
 /trader
