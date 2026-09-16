@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,7 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gong-yeongbin/my-trading/internal/app"
 	"github.com/gong-yeongbin/my-trading/internal/config"
+	"github.com/gong-yeongbin/my-trading/internal/data"
+	"github.com/gong-yeongbin/my-trading/internal/kis"
+	"github.com/gong-yeongbin/my-trading/internal/logfile"
 	"github.com/gong-yeongbin/my-trading/internal/ls"
 	"github.com/gong-yeongbin/my-trading/internal/tui"
 )
@@ -19,8 +25,8 @@ import (
 const usage = `사용법:
   trader                 TUI
   trader ls-probe [초]   LS 실시간 이벤트를 N초(기본 30) 동안 출력 (연결 확인용)
-  trader universe        (6단계 계획에서 구현)
-  trader fetch           (6단계 계획에서 구현)
+  trader universe        마스터 파일로 종목 목록 갱신
+  trader fetch [--from YYYY-MM-DD]   지수·종목 일봉 증분 수집
   trader watch           (7단계 계획에서 구현)
 `
 
@@ -48,8 +54,12 @@ func run(args []string) error {
 	switch args[0] {
 	case "ls-probe":
 		return runLSProbe(ctx, cfg, args[1:])
-	case "universe", "fetch", "watch":
-		return fmt.Errorf("%s 는 아직 구현되지 않았습니다", args[0])
+	case "universe":
+		return runUniverse(ctx, cfg)
+	case "fetch":
+		return runFetch(ctx, cfg, args[1:])
+	case "watch":
+		return fmt.Errorf("%s 는 아직 구현되지 않았습니다 (7단계)", args[0])
 	default:
 		fmt.Print(usage)
 		return fmt.Errorf("알 수 없는 명령 %q", args[0])
@@ -93,4 +103,111 @@ func runLSProbe(ctx context.Context, cfg *config.Config, args []string) error {
 			fmt.Printf("%s %T %+v\n", time.Now().Format("15:04:05"), ev, ev)
 		}
 	}
+}
+
+func newClient(cfg *config.Config) (*kis.Client, error) {
+	if err := cfg.RequireAppKey(); err != nil {
+		return nil, err
+	}
+	return kis.New(cfg.KIS.BaseURL(), cfg.KIS.AppKey, cfg.KIS.AppSecret, cfg.KIS.TokenCache, cfg.KIS.EffectiveRPS()), nil
+}
+
+// openLogger 는 로그 파일을 연다. 열 수 없으면 stderr 로 대신 기록하며 경고를 찍는다 (spec §11).
+func openLogger(cfg *config.Config) (*slog.Logger, func()) {
+	logger, closer, err := logfile.Open(cfg.Log.File)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "경고: 로그 파일을 열 수 없어 표준 오류로 대신 기록합니다:", err)
+		return slog.New(slog.NewTextHandler(os.Stderr, nil)), func() {}
+	}
+	return logger, func() { closer.Close() }
+}
+
+func runUniverse(ctx context.Context, cfg *config.Config) error {
+	logger, done := openLogger(cfg)
+	defer done()
+	logger = logger.With("kind", "수집")
+
+	client, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+	store, err := data.Open(cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	res, err := app.RunUniverse(ctx, cfg, store, client)
+	if err != nil {
+		logger.Error("유니버스 갱신 실패", "err", err)
+		return err
+	}
+	fmt.Printf("마스터 %d 종목 중 %d 종목 저장", res.Downloaded, res.Kept)
+	logArgs := []any{"downloaded", res.Downloaded, "kept", res.Kept}
+	for _, m := range cfg.Universe.Markets {
+		fmt.Printf("  %s %d", m, res.ByMarket[m])
+		logArgs = append(logArgs, m, res.ByMarket[m])
+	}
+	fmt.Println()
+	logger.Info("유니버스 갱신", logArgs...)
+	return nil
+}
+
+func runFetch(ctx context.Context, cfg *config.Config, args []string) error {
+	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
+	fromStr := fs.String("from", "", "저장된 봉이 없을 때의 시작일 (YYYY-MM-DD)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var opts app.FetchOptions
+	if *fromStr != "" {
+		from, err := data.ParseDate(*fromStr)
+		if err != nil {
+			return fmt.Errorf("--from: %w", err)
+		}
+		opts.From = from
+	}
+
+	logger, done := openLogger(cfg)
+	defer done()
+	logger = logger.With("kind", "수집")
+
+	client, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+	store, err := data.Open(cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	logger.Info("일봉 수집 시작", "env", cfg.KIS.Env, "from", *fromStr)
+
+	started := time.Now()
+	fmt.Fprintf(os.Stderr, "[%s] 지수 일봉 수집 중...\n", cfg.KIS.Env)
+	res, err := app.RunFetch(ctx, cfg, store, client, opts, func(p app.FetchProgress) {
+		if p.Err != nil {
+			fmt.Fprintf(os.Stderr, "\r[%d/%d] %s 실패: %v\n", p.Done, p.Total, p.Code, p.Err)
+			logger.Warn("종목 수집 실패", "code", p.Code, "err", p.Err)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "\r[%d/%d] %s", p.Done, p.Total, p.Code)
+	})
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fmt.Printf("중단됨: 종목 %d 성공, 봉 %d 저장, 실패 %d\n", res.Symbols, res.Bars, len(res.Failures))
+			logger.Warn("일봉 수집 중단 (사용자)", "symbols", res.Symbols, "bars", res.Bars, "failed", len(res.Failures))
+			return err
+		}
+		logger.Error("일봉 수집 중단", "err", err)
+		return err
+	}
+	elapsed := time.Since(started).Round(time.Second)
+	fmt.Printf("종목 %d 성공, 봉 %d 저장, 실패 %d, 소요 %s\n", res.Symbols, res.Bars, len(res.Failures), elapsed)
+	for _, f := range res.Failures {
+		fmt.Printf("  실패 %s: %v\n", f.Code, f.Err)
+	}
+	logger.Info("일봉 수집 완료", "symbols", res.Symbols, "bars", res.Bars, "failed", len(res.Failures), "elapsed", elapsed.String())
+	return nil
 }

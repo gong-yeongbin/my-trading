@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gong-yeongbin/my-trading/internal/config"
 	"github.com/gong-yeongbin/my-trading/internal/data"
+	"github.com/gong-yeongbin/my-trading/internal/kis"
 )
 
 type BarSource interface {
@@ -82,6 +84,9 @@ func RunFetch(ctx context.Context, cfg *config.Config, store data.Store, src Bar
 		}
 		err := fetchSymbol(ctx, store, src, sym.Code, start, today, &res)
 		if err != nil {
+			if errors.Is(err, kis.ErrUnauthorized) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return res, err
+			}
 			res.Failures = append(res.Failures, FetchFailure{Code: sym.Code, Err: err})
 		} else {
 			res.Symbols++

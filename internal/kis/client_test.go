@@ -3,6 +3,7 @@ package kis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -171,8 +172,8 @@ func TestGetRefreshesTokenOn401Once(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		okJSON(w, `{"rt_cd":"1","msg_cd":"EGW00123","msg1":"만료"}`)
 	})
-	if err := f.client.get(context.Background(), "/ping", "TR1", nil, &out); err == nil {
-		t.Error("expected error after second 401")
+	if err := f.client.get(context.Background(), "/ping", "TR1", nil, &out); err == nil || !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("expected ErrUnauthorized after second 401, got %v", err)
 	}
 }
 

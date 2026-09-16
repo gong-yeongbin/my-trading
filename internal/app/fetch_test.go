@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/gong-yeongbin/my-trading/internal/config"
 	"github.com/gong-yeongbin/my-trading/internal/data"
+	"github.com/gong-yeongbin/my-trading/internal/kis"
 )
 
 type call struct {
@@ -16,13 +18,17 @@ type call struct {
 }
 
 type fakeBars struct {
-	calls    []call
-	failCode string
-	indexErr error
+	calls      []call
+	failCode   string
+	unauthCode string
+	indexErr   error
 }
 
 func (f *fakeBars) DailyBars(_ context.Context, code string, from, to time.Time) ([]data.Bar, error) {
 	f.calls = append(f.calls, call{"bar", code, from, to})
+	if code == f.unauthCode {
+		return nil, fmt.Errorf("x: %w", kis.ErrUnauthorized)
+	}
 	if code == f.failCode {
 		return nil, errors.New("boom")
 	}
@@ -133,6 +139,24 @@ func TestRunFetchContinuesOnSymbolFailure(t *testing.T) {
 	}
 	if _, ok, _ := store.LastBarDate(ctx, "005930"); !ok {
 		t.Error("healthy symbol should still be stored")
+	}
+}
+
+func TestRunFetchAbortsOnUnauthorized(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+	store.UpsertSymbols(ctx, []data.Symbol{{Code: "000660", Name: "SK하이닉스", Market: "kospi"}, {Code: "005930", Name: "삼성전자", Market: "kospi"}})
+	src := &fakeBars{unauthCode: "000660"}
+	res, err := RunFetch(ctx, fetchConfig(), store, src, FetchOptions{Today: data.Date(2024, 9, 2)}, nil)
+	if !errors.Is(err, kis.ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized, got %v", err)
+	}
+	// 지수(1) + 첫 종목(1) 이후 중단 — 두 번째 종목은 호출되지 않는다
+	if len(src.calls) != 2 {
+		t.Errorf("expected no further symbol calls after abort, got %+v", src.calls)
+	}
+	if len(res.Failures) > 1 {
+		t.Errorf("expected 0 or 1 recorded failures, got %+v", res.Failures)
 	}
 }
 

@@ -4,6 +4,7 @@ package kis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,9 @@ const (
 	rateLimitMsgCd = "EGW00201"
 	maxRateRetries = 3
 )
+
+// ErrUnauthorized 는 토큰 재발급 후에도 401 이 나서 포기할 때 반환된다 (spec §11).
+var ErrUnauthorized = errors.New("kis: 인증 실패 (앱키 또는 토큰)")
 
 type Client struct {
 	BaseURL        string
@@ -68,7 +72,7 @@ func (c *Client) get(ctx context.Context, path, trID string, params url.Values, 
 		}
 		if status == http.StatusUnauthorized {
 			if refreshed {
-				return fmt.Errorf("kis: %s: 401 after token refresh: %s", path, body)
+				return fmt.Errorf("%w: kis: %s: 401 after token refresh: %s", ErrUnauthorized, path, body)
 			}
 			refreshed = true
 			c.invalidateToken()
