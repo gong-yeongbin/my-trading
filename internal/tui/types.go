@@ -72,6 +72,12 @@ type LogMsg struct {
 	Lines []LogLine
 }
 
+// FetchStatusMsg 는 자동 일봉 수집의 진행 상태. Running 이 false 면 하단 표시를 지운다.
+type FetchStatusMsg struct {
+	Running     bool
+	Done, Total int
+}
+
 // MarketStatusMsg 는 LS 장운영정보를 문구로 바꾼 것 (장전/장중/동시호가/장마감/시간외). 그날 안에서는 시계 판정보다 우선한다.
 type MarketStatusMsg struct {
 	Status string

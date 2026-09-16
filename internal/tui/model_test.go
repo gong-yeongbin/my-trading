@@ -217,6 +217,22 @@ func TestDisconnectedResetsNewsAndIndex(t *testing.T) {
 	}
 }
 
+func TestFetchStatusInFooter(t *testing.T) {
+	m := sized(t)
+	m = send(m, FetchStatusMsg{Running: true, Done: 123, Total: 2500})
+	if !strings.Contains(m.View(), "수집 중 123/2500") {
+		t.Errorf("footer should show fetch progress:\n%s", m.View())
+	}
+	m = send(m, FetchStatusMsg{Running: false})
+	if strings.Contains(m.View(), "수집 중") {
+		t.Errorf("footer should drop progress when done:\n%s", m.View())
+	}
+	m = send(m, FetchStatusMsg{Running: true})
+	if !strings.Contains(m.View(), "수집 중") || strings.Contains(m.View(), "0/0") {
+		t.Errorf("footer should show fetch progress without numbers when total is unknown:\n%s", m.View())
+	}
+}
+
 func TestMarketStatusFromClockAndJIF(t *testing.T) {
 	m := sized(t)
 	tue1000 := time.Date(2026, 9, 15, 10, 0, 0, 0, market.KST)

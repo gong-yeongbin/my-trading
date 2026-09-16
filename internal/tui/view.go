@@ -21,7 +21,13 @@ func (m Model) View() string {
 	w := m.width
 	rule := strings.Repeat("─", w)
 	header := spread(m.headerLeft(), m.now.Format("15:04:05")+" ", w)
-	footer := spread(m.footerLeft(), keyHint+" ", w)
+	right := keyHint + " "
+	if m.fetch.Running && m.fetch.Total == 0 {
+		right = "수집 중  " + right
+	} else if m.fetch.Running {
+		right = fmt.Sprintf("수집 중 %d/%d  ", m.fetch.Done, m.fetch.Total) + right
+	}
+	footer := spread(m.footerLeft(), right, w)
 	lines := make([]string, 0, m.height)
 	lines = append(lines, rule, header, rule)
 	lines = append(lines, m.bodyLines()...)

@@ -26,6 +26,7 @@ universe:
   exclude_flags: [거래정지, SPAC]
 fetch:
   start_date: "2021-01-01"
+  daily_at: "04:00"
 strategy:
   index_ma_days: 20
   min_turnover: 10000000000
@@ -87,6 +88,9 @@ func TestLoadGood(t *testing.T) {
 	}
 	if len(cfg.Universe.ExcludeFlags) != 2 {
 		t.Errorf("ExcludeFlags = %v", cfg.Universe.ExcludeFlags)
+	}
+	if cfg.Fetch.DailyAt != "04:00" {
+		t.Errorf("DailyAt = %q", cfg.Fetch.DailyAt)
 	}
 }
 
@@ -173,5 +177,19 @@ func TestLoadDotEnv(t *testing.T) {
 	}
 	if err := LoadDotEnv(filepath.Join(t.TempDir(), "missing")); err != nil {
 		t.Errorf("missing file should not error: %v", err)
+	}
+}
+
+func TestFetchDailyAtDefaultAndValidation(t *testing.T) {
+	y := strings.Replace(goodYAML, "  daily_at: \"04:00\"\n", "", 1)
+	cfg, err := Load(writeTemp(t, "c.yaml", y))
+	if err != nil || cfg.Fetch.DailyAt != "04:00" {
+		t.Fatalf("missing daily_at should default to 04:00: %q %v", cfg.Fetch.DailyAt, err)
+	}
+	for _, bad := range []string{`"4:00"`, `"24:00"`, `"04:60"`, `"abc"`} {
+		y := strings.Replace(goodYAML, `daily_at: "04:00"`, "daily_at: "+bad, 1)
+		if _, err := Load(writeTemp(t, "c.yaml", y)); err == nil {
+			t.Errorf("daily_at %s should fail validation", bad)
+		}
 	}
 }

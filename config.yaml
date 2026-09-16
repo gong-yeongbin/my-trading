@@ -22,7 +22,8 @@ universe:
   exclude_flags: [거래정지, 정리매매, 관리종목, 시장경고, 단기과열, 이상급등, SPAC]
 
 fetch:
-  start_date: "2021-01-01"
+  start_date: "2025-09-01"     # 1차(선별 전용): 60일선용 1년치. 백테스트 시 2021-01-01 로 되돌리고 봉을 비운 뒤 재수집
+  daily_at: "04:00"          # TUI 자동 수집 시각 (KST). 전날 봉을 새벽에 받는다
 
 strategy:
   index_ma_days: 20

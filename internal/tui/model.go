@@ -60,6 +60,7 @@ type Model struct {
 	watch     WatchMsg
 	holdings  HoldingsMsg
 	logs      []LogLine
+	fetch     FetchStatusMsg
 }
 
 func New() Model {
@@ -110,6 +111,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if panelLog == m.active {
 			m.clampScroll()
 		}
+	case FetchStatusMsg:
+		m.fetch = msg
 	case MarketStatusMsg:
 		m.jifStatus, m.jifAt = msg.Status, m.now
 	case ConnectedMsg:

@@ -76,6 +76,7 @@ type UniverseConfig struct {
 
 type FetchConfig struct {
 	StartDate string `yaml:"start_date"`
+	DailyAt   string `yaml:"daily_at"` // HH:MM KST. TUI 가 매일 이 시각에 전날 일봉을 받는다. 비어 있으면 04:00
 }
 
 type StrategyConfig struct {
@@ -100,6 +101,9 @@ func Load(path string) (*Config, error) {
 	cfg := &Config{DBPath: "data/market.db"}
 	if err := yaml.Unmarshal(b, cfg); err != nil {
 		return nil, fmt.Errorf("config: parse %s: %w", path, err)
+	}
+	if cfg.Fetch.DailyAt == "" {
+		cfg.Fetch.DailyAt = "04:00"
 	}
 	cfg.KIS.AppKey = os.Getenv("KIS_APP_KEY")
 	cfg.KIS.AppSecret = os.Getenv("KIS_APP_SECRET")
@@ -142,6 +146,9 @@ func (c *Config) Validate() error {
 	}
 	if _, err := time.Parse("2006-01-02", c.Fetch.StartDate); err != nil {
 		errs = append(errs, fmt.Errorf("fetch.start_date must be YYYY-MM-DD: %w", err))
+	}
+	if _, err := time.Parse("15:04", c.Fetch.DailyAt); err != nil || len(c.Fetch.DailyAt) != 5 {
+		errs = append(errs, fmt.Errorf("fetch.daily_at must be HH:MM: %q", c.Fetch.DailyAt))
 	}
 	s := c.Strategy
 	for name, v := range map[string]int{

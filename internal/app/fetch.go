@@ -19,6 +19,8 @@ type BarSource interface {
 type FetchOptions struct {
 	From  time.Time // 저장된 봉이 없을 때의 시작일. 비어 있으면 fetch.start_date
 	Today time.Time // 비어 있으면 KST 오늘
+	// SkipSymbolsIfIndexUnchanged 가 켜져 있고 지수에 새 봉이 하나도 없으면 (주말·공휴일) 종목 호출을 건너뛴다.
+	SkipSymbolsIfIndexUnchanged bool
 }
 
 type FetchProgress struct {
@@ -37,6 +39,7 @@ type FetchResult struct {
 	Symbols  int // 성공한 종목 수
 	Bars     int // 저장한 봉 수
 	Failures []FetchFailure
+	Skipped  bool // 지수 무변화로 종목 수집을 건너뜀
 }
 
 // RunFetch 는 지수 일봉을 먼저(실패 시 즉시 중단), 이어서 종목 일봉을 증분 수집한다.
@@ -55,6 +58,7 @@ func RunFetch(ctx context.Context, cfg *config.Config, store data.Store, src Bar
 		}
 	}
 
+	indexNew := 0
 	for _, market := range cfg.Universe.Markets {
 		last, ok, err := store.LastIndexBarDate(ctx, market)
 		if err != nil {
@@ -71,6 +75,11 @@ func RunFetch(ctx context.Context, cfg *config.Config, store data.Store, src Bar
 		if err := store.UpsertIndexBars(ctx, market, bars); err != nil {
 			return FetchResult{}, fmt.Errorf("fetch: save index %s: %w", market, err)
 		}
+		indexNew += len(bars)
+	}
+
+	if opts.SkipSymbolsIfIndexUnchanged && indexNew == 0 {
+		return FetchResult{Skipped: true}, nil
 	}
 
 	syms, err := store.ListSymbols(ctx)

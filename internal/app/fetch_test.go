@@ -18,10 +18,11 @@ type call struct {
 }
 
 type fakeBars struct {
-	calls      []call
-	failCode   string
-	unauthCode string
-	indexErr   error
+	calls       []call
+	failCode    string
+	unauthCode  string
+	indexErr    error
+	noIndexBars bool
 }
 
 func (f *fakeBars) DailyBars(_ context.Context, code string, from, to time.Time) ([]data.Bar, error) {
@@ -43,6 +44,9 @@ func (f *fakeBars) IndexBars(_ context.Context, market string, from, to time.Tim
 	f.calls = append(f.calls, call{"index", market, from, to})
 	if f.indexErr != nil {
 		return nil, f.indexErr
+	}
+	if f.noIndexBars {
+		return nil, nil
 	}
 	var out []data.IndexBar
 	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
@@ -170,5 +174,44 @@ func TestRunFetchStopsOnIndexFailure(t *testing.T) {
 	}
 	if len(src.calls) != 1 {
 		t.Errorf("symbols must not be fetched after index failure: %+v", src.calls)
+	}
+}
+
+func TestRunFetchSkipsSymbolsWhenIndexUnchanged(t *testing.T) {
+	ctx := context.Background()
+	store := openStore(t)
+	store.UpsertSymbols(ctx, []data.Symbol{{Code: "005930", Name: "삼성전자", Market: "kospi"}})
+	yesterday := data.Date(2024, 9, 9)
+	if err := store.UpsertIndexBars(ctx, "kospi", []data.IndexBar{{Date: yesterday, Open: 1, High: 1, Low: 1, Close: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	today := data.Date(2024, 9, 10)
+
+	src := &fakeBars{noIndexBars: true} // 지수에 새 봉 없음 (휴장일)
+	res, err := RunFetch(ctx, fetchConfig(), store, src, FetchOptions{Today: today, SkipSymbolsIfIndexUnchanged: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Skipped || res.Symbols != 0 {
+		t.Errorf("expected Skipped, got %+v", res)
+	}
+	for _, c := range src.calls {
+		if c.kind == "bar" {
+			t.Errorf("symbol should not be called: %+v", src.calls)
+		}
+	}
+
+	// 옵션이 꺼져 있으면 지수가 비어도 종목을 호출한다
+	src2 := &fakeBars{noIndexBars: true}
+	res, err = RunFetch(ctx, fetchConfig(), store, src2, FetchOptions{Today: today}, nil)
+	if err != nil || res.Skipped || res.Symbols != 1 {
+		t.Errorf("without option: %+v %v", res, err)
+	}
+
+	// 지수에 새 봉이 있으면 옵션이 켜져 있어도 종목을 호출한다
+	src3 := &fakeBars{}
+	res, err = RunFetch(ctx, fetchConfig(), store, src3, FetchOptions{Today: today, SkipSymbolsIfIndexUnchanged: true}, nil)
+	if err != nil || res.Skipped || res.Symbols != 1 {
+		t.Errorf("with new index bars: %+v %v", res, err)
 	}
 }
