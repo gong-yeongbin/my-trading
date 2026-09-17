@@ -22,6 +22,12 @@ func (m Model) View() string {
 	rule := strings.Repeat("─", w)
 	header := spread(m.headerLeft(), m.now.Format("15:04:05")+" ", w)
 	right := keyHint + " "
+	if m.active == panelHoldings {
+		right = "r 새로고침  " + right
+		if m.holdings.Connected {
+			right = "갱신 " + m.holdings.At.Format("15:04:05") + "  " + right
+		}
+	}
 	if m.fetch.Running && m.fetch.Total == 0 {
 		right = "수집 중  " + right
 	} else if m.fetch.Running {

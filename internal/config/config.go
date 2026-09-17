@@ -28,13 +28,12 @@ type Config struct {
 // KISConfig 는 한투 Open API 설정. 시세(일봉·지수·마스터) 수집은 항상 실전 서버·실전 키(Market)를
 // 쓴다 — 모의 서버는 시세 조회가 느리고 값은 모의·실전이 같기 때문이다. TradeEnv 는 매매·잔고(8단계)에만 적용된다.
 type KISConfig struct {
-	TradeEnv           string  `yaml:"trade_env"`           // demo | real — 매매·잔고에만 적용
-	TokenCache         string  `yaml:"token_cache"`         // 실전(시세) 토큰 캐시
-	TradeTokenCache    string  `yaml:"trade_token_cache"`   // 매매용 토큰 캐시 (비어 있으면 token_cache + ".trade")
-	RequestsPerSecond  float64 `yaml:"requests_per_second"` // 0 이면 15
-	BalancePollSeconds int     `yaml:"balance_poll_seconds"`
-	Market             Creds   `yaml:"-"` // 실전 키. KIS_REAL_APP_KEY / KIS_REAL_APP_SECRET / KIS_REAL_ACCOUNT
-	Trade              Creds   `yaml:"-"` // TradeEnv 에 따른 키. demo 면 KIS_DEMO_*(구 KIS_APP_KEY 등 fallback), real 이면 Market 과 같음
+	TradeEnv          string  `yaml:"trade_env"`           // demo | real — 매매·잔고에만 적용
+	TokenCache        string  `yaml:"token_cache"`         // 실전(시세) 토큰 캐시
+	TradeTokenCache   string  `yaml:"trade_token_cache"`   // 매매용 토큰 캐시 (비어 있으면 token_cache + ".trade")
+	RequestsPerSecond float64 `yaml:"requests_per_second"` // 0 이면 15
+	Market            Creds   `yaml:"-"`                   // 실전 키. KIS_REAL_APP_KEY / KIS_REAL_APP_SECRET / KIS_REAL_ACCOUNT
+	Trade             Creds   `yaml:"-"`                   // TradeEnv 에 따른 키. demo 면 KIS_DEMO_*(구 KIS_APP_KEY 등 fallback), real 이면 Market 과 같음
 }
 
 // Creds 는 앱키·시크릿·계좌 한 벌.
@@ -170,9 +169,6 @@ func (c *Config) Validate() error {
 	}
 	if c.KIS.RequestsPerSecond < 0 {
 		errs = append(errs, errors.New("kis.requests_per_second must be >= 0"))
-	}
-	if c.KIS.BalancePollSeconds <= 0 {
-		errs = append(errs, errors.New("kis.balance_poll_seconds must be > 0"))
 	}
 	if c.LS.BaseURL == "" || c.LS.WSURL == "" || c.LS.TokenCache == "" {
 		errs = append(errs, errors.New("ls.base_url, ls.ws_url, ls.token_cache are required"))

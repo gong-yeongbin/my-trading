@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gong-yeongbin/my-trading/internal/kis"
-	"github.com/gong-yeongbin/my-trading/internal/market"
 )
 
 // holdingsMsgFrom 은 잔고를 화면 메시지로 바꾼다. 평가금액(현재가×수량) 큰 순. 보유일은 매매 로그 전까지 "-"(0).
@@ -29,15 +28,20 @@ func holdingsMsgFrom(b kis.Balance, mkt func(code string) string) HoldingsMsg {
 	return msg
 }
 
-// holdingsLoop 은 시작 시 한 번, 이후 every 마다 거래 시간대(market.At(now).Trading())면 잔고를 조회한다.
-// 거래 시간대가 끝난 직후 한 번 더 조회해 종가를 반영한다. 실패하면 로그만 남기고 마지막 값을 유지한다.
-// 한 번도 성공하지 못했으면 장외에도 holdingsRetry 간격으로 다시 시도한다.
-// holdingsRetry 는 첫 성공 전 장외 재시도 간격.
+// holdingsRetry 는 첫 성공 전 재시도 간격.
 const holdingsRetry = time.Minute
 
-func holdingsLoop(ctx context.Context, every time.Duration, now func() time.Time, fetch func(context.Context) (HoldingsMsg, error), send func(tea.Msg), logger *slog.Logger) {
+// preOpen 은 매일 잔고를 한 번 조회하는 장전 시각.
+var preOpen = struct{ hour, min int }{8, 59}
+
+// holdingsLoop 은 시작 시 한 번, 매일 장전(08:59, 마지막 조회가 그날 08:59 이전이면 — 잠자기로 지나쳤어도 깨어나면) 한 번,
+// refresh 신호가 오면 즉시 잔고를 조회한다. every 마다 시계를 확인한다.
+// 실패하면 로그만 남기고 마지막 값을 유지하되, 한 번도 성공하지 못했으면 holdingsRetry 간격으로 다시 시도한다.
+func holdingsLoop(ctx context.Context, every time.Duration, now func() time.Time, refresh <-chan struct{}, fetch func(context.Context) (HoldingsMsg, error), send func(tea.Msg), logger *slog.Logger) {
 	ok := false
-	poll := func() {
+	var lastAt time.Time
+	poll := func(at time.Time) {
+		lastAt = at
 		msg, err := fetch(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -50,26 +54,25 @@ func holdingsLoop(ctx context.Context, every time.Duration, now func() time.Time
 			return
 		}
 		ok = true
+		msg.At = at
 		send(msg)
 	}
-	poll()
-	cur := now()
-	wasTrading := market.At(cur).Trading()
-	retryAt := cur.Add(holdingsRetry)
+	poll(now())
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-refresh:
+			poll(now())
+			continue
 		case <-t.C:
 		}
-		cur = now()
-		trading := market.At(cur).Trading()
-		if trading || wasTrading || (!ok && !cur.Before(retryAt)) {
-			poll()
-			retryAt = cur.Add(holdingsRetry)
+		cur := now()
+		pre := time.Date(cur.Year(), cur.Month(), cur.Day(), preOpen.hour, preOpen.min, 0, 0, cur.Location())
+		if (!cur.Before(pre) && lastAt.Before(pre)) || (!ok && !cur.Before(lastAt.Add(holdingsRetry))) {
+			poll(cur)
 		}
-		wasTrading = trading
 	}
 }

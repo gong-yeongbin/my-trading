@@ -13,7 +13,6 @@ kis:
   trade_env: demo
   token_cache: data/token.json
   requests_per_second: 0
-  balance_poll_seconds: 10
 ls:
   base_url: https://ls.example
   ws_url: wss://ls.example/websocket
@@ -95,9 +94,6 @@ func TestLoadGood(t *testing.T) {
 	if cfg.KIS.Trade.AppKey != "k" || cfg.KIS.Trade.AppSecret != "s" || cfg.KIS.Trade.Account != "12345678-01" {
 		t.Errorf("trade legacy fallback: %+v", cfg.KIS.Trade)
 	}
-	if cfg.KIS.BalancePollSeconds != 10 {
-		t.Errorf("BalancePollSeconds = %d", cfg.KIS.BalancePollSeconds)
-	}
 	// trade_token_cache 가 yaml 에 없으면 token_cache + ".trade" 가 기본값이다.
 	if cfg.KIS.TradeTokenCache != cfg.KIS.TokenCache+".trade" {
 		t.Errorf("TradeTokenCache default = %q, want %q", cfg.KIS.TradeTokenCache, cfg.KIS.TokenCache+".trade")
@@ -156,7 +152,6 @@ func TestTradeEnvDefaults(t *testing.T) {
 func TestValidateErrors(t *testing.T) {
 	cases := map[string]string{
 		"trade_env": "trade_env: demo",
-		"poll":      "balance_poll_seconds: 10",
 		"ws":        "ws_url: wss://ls.example/websocket",
 		"logfile":   "file: data/test.log",
 		"ma_order":  "ma_short_days: 20\n  ma_long_days: 60",
@@ -165,7 +160,6 @@ func TestValidateErrors(t *testing.T) {
 	}
 	bad := map[string]string{
 		"trade_env": "trade_env: paper",
-		"poll":      "balance_poll_seconds: 0",
 		"ws":        `ws_url: ""`,
 		"logfile":   `file: ""`,
 		"ma_order":  "ma_short_days: 60\n  ma_long_days: 20",

@@ -279,3 +279,28 @@ func TestIndexPrevCloseShownWhenDisconnected(t *testing.T) {
 		t.Errorf("kosdaq without prev close stays 미연결:\n%s", m.View())
 	}
 }
+
+func TestRefreshKeyOnlyInHoldingsPanel(t *testing.T) {
+	keyR := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}}
+	calls := 0
+	m := sized(t)
+	m.refresh = func() { calls++ }
+	m, _ = press(m, keyR) // 관심종목 패널
+	if calls != 0 {
+		t.Errorf("r outside holdings should not refresh")
+	}
+	m, _ = press(m, keyDown)
+	m, _ = press(m, keyEnter)
+	m, _ = press(m, keyR)
+	if calls != 1 {
+		t.Errorf("r in holdings should refresh once, got %d", calls)
+	}
+	v := m.View()
+	if !strings.Contains(v, "r 새로고침") || strings.Contains(v, "갱신 ") {
+		t.Errorf("footer should show r 새로고침 without 갱신 before data:\n%s", v)
+	}
+	m = send(m, HoldingsMsg{Connected: true, At: time.Date(2026, 9, 17, 8, 59, 3, 0, time.Local)})
+	if !strings.Contains(m.View(), "갱신 08:59:03  r 새로고침") {
+		t.Errorf("footer should show refresh time:\n%s", m.View())
+	}
+}

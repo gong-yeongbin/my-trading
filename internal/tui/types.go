@@ -74,6 +74,7 @@ type WatchMsg struct {
 // HoldingsMsg 의 Connected 가 false 면 "미연결" 로 표시한다.
 type HoldingsMsg struct {
 	Connected bool
+	At        time.Time // 조회 시각. 폴링이 없으니 언제 값인지 보여준다
 	Rows      []HoldingRow
 	Summary   HoldingsSummary
 }

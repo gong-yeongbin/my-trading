@@ -73,6 +73,7 @@ type Model struct {
 	editing     bool
 	input       textinput.Model
 	saver       func(settings.Values) error
+	refresh     func() // 보유종목 새로고침. nil 이면 무시
 }
 
 func New() Model {
@@ -190,6 +191,10 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focus = focusPanel // 고른 패널로 바로 들어간다. Tab 으로 메뉴 복귀
 		} else if m.active == panelSettings {
 			return m.settingsEnter()
+		}
+	case "r":
+		if m.active == panelHoldings && m.refresh != nil {
+			m.refresh()
 		}
 	}
 	m.clampScroll()

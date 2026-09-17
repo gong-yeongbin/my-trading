@@ -28,6 +28,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	defer cancel()
 	m := New()
 	m.saver = func(v settings.Values) error { return settings.Save(".env", "config.yaml", v) }
+	refresh := make(chan struct{}, 1) // 보유종목 새로고침(r). 버퍼 1: 연타해도 한 번
+	m.refresh = func() {
+		select {
+		case refresh <- struct{}{}:
+		default:
+		}
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 	go func() {
 		v, err := settings.Load(".env", "config.yaml")
@@ -106,7 +113,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			})
 		}
 
-		// 보유종목: 매매 서버(trade_env)의 계좌를 폴링한다.
+		// 보유종목: 매매 서버(trade_env)의 계좌를 켤 때·장전 08:59·r 키에 조회한다.
 		holdLog := logger.With("kind", "매매")
 		if err := cfg.RequireTradeKey(); err != nil {
 			holdLog.Warn("보유종목 비활성: " + err.Error())
@@ -129,7 +136,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				}
 				return holdingsMsgFrom(b, func(code string) string { return mk[code] }), nil
 			}
-			go holdingsLoop(ctx, time.Duration(cfg.KIS.BalancePollSeconds)*time.Second, time.Now, fetch, p.Send, holdLog)
+			go holdingsLoop(ctx, time.Minute, time.Now, refresh, fetch, p.Send, holdLog)
 		}
 	}
 

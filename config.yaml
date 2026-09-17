@@ -6,7 +6,6 @@ kis:
   trade_token_cache: data/token_demo.json # 매매용
   requests_per_second: 0       # 0 이면 15 (실전)
   # 시세용 앱키는 .env 의 KIS_REAL_*. 매매용 앱키는 trade_env 에 따라 KIS_DEMO_* / KIS_REAL_*. TUI 설정 메뉴에서 입력 가능
-  balance_poll_seconds: 10     # 장중 보유 종목 갱신 주기
 
 ls:
   base_url: https://openapi.ls-sec.co.kr:8080
