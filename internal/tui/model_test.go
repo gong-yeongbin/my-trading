@@ -241,7 +241,7 @@ func TestMarketStatusFromClockAndJIF(t *testing.T) {
 	if !strings.Contains(m.View(), "[장중]") {
 		t.Errorf("clock-based status missing:\n%s", m.View())
 	}
-	m = send(m, MarketStatusMsg{Status: "동시호가"})
+	m = send(m, MarketStatusMsg{Status: market.ClosingAuction})
 	if !strings.Contains(m.View(), "[동시호가]") {
 		t.Errorf("JIF status should override:\n%s", m.View())
 	}

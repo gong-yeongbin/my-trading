@@ -61,7 +61,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				case ev := <-events:
 					if ms, ok := ev.(ls.MarketStatus); ok {
 						status, known := market.FromJIF(ms.Code)
-						indexLog.Info(fmt.Sprintf("%s 장운영 %s", ms.Market, ms.Code), "status", status, "known", known)
+						indexLog.Info(fmt.Sprintf("%s 장운영 %s", ms.Market, ms.Code), "status", status.String(), "known", known)
 						if known {
 							p.Send(MarketStatusMsg{Status: status})
 						}
@@ -105,13 +105,34 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				runFetchOnce(c, cfg, store, client, fetchLog, p.Send, func() { runScreen(c, cfg, store, screenLog, p.Send) })
 			})
 		}
+
+		// 보유종목: 매매 서버(trade_env)의 계좌를 폴링한다.
+		holdLog := logger.With("kind", "매매")
+		if err := cfg.RequireTradeKey(); err != nil {
+			holdLog.Warn("보유종목 비활성: " + err.Error())
+			go p.Send(HoldingsMsg{Connected: false})
+		} else if acct, err := kis.ParseAccount(cfg.KIS.Trade.Account); err != nil {
+			holdLog.Warn("보유종목 비활성: " + err.Error() + " — 설정 메뉴에서 계좌번호 입력")
+			go p.Send(HoldingsMsg{Connected: false})
+		} else {
+			trade := kis.New(cfg.KIS.TradeBaseURL(), cfg.KIS.Trade.AppKey, cfg.KIS.Trade.AppSecret, cfg.KIS.TradeTokenCache, cfg.KIS.TradeRPS())
+			demo := cfg.KIS.TradeEnv != "real"
+			fetch := func(c context.Context) (HoldingsMsg, error) {
+				b, err := trade.Balance(c, acct, demo)
+				if err != nil {
+					return HoldingsMsg{}, err
+				}
+				syms, _ := store.ListSymbols(c)
+				mk := map[string]string{}
+				for _, s := range syms {
+					mk[s.Code] = s.Market
+				}
+				return holdingsMsgFrom(b, func(code string) string { return mk[code] }), nil
+			}
+			go holdingsLoop(ctx, time.Duration(cfg.KIS.BalancePollSeconds)*time.Second, time.Now, fetch, p.Send, holdLog)
+		}
 	}
 
-	go func() {
-		for _, msg := range fakeMessages(time.Now()) {
-			p.Send(msg)
-		}
-	}()
 	_, err = p.Run()
 	cancel()
 	if closer != nil {

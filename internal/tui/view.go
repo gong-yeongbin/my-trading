@@ -49,7 +49,7 @@ func (m Model) headerLeft() string {
 }
 
 func (m Model) footerLeft() string {
-	return " [" + m.marketStatus() + "] 코스피 " + fmtIndex(m.kospi, m.linkOK) + "   코스닥 " + fmtIndex(m.kosdaq, m.linkOK)
+	return " [" + m.marketStatus().String() + "] 코스피 " + fmtIndex(m.kospi, m.linkOK) + "   코스닥 " + fmtIndex(m.kosdaq, m.linkOK)
 }
 
 // fmtIndex 는 지수 한 칸. 값이 없을 때 연결은 되어 있으면 장외(데이터 대기), 아니면 미연결.

@@ -54,8 +54,9 @@ type Model struct {
 	cursor     [panelCount]int
 	offset     [panelCount]int
 
-	linkOK    bool      // LS 연결·구독 완료 여부
-	jifStatus string    // JIF 로 받은 장 상태. 비어 있으면 시계 기준
+	linkOK    bool          // LS 연결·구독 완료 여부
+	jifStatus market.Status // JIF 로 받은 장 상태. jifKnown 이 false 면 시계 기준
+	jifKnown  bool
 	jifAt     time.Time // jifStatus 를 받은 시각
 	news      NewsMsg
 	newsOK    bool
@@ -143,7 +144,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FetchStatusMsg:
 		m.fetch = msg
 	case MarketStatusMsg:
-		m.jifStatus, m.jifAt = msg.Status, m.now
+		m.jifStatus, m.jifKnown, m.jifAt = msg.Status, true, m.now
 	case ConnectedMsg:
 		m.linkOK = true
 	case DisconnectedMsg:
@@ -229,14 +230,14 @@ func (m *Model) clampScroll() {
 }
 
 // marketStatus 는 하단 줄에 붙일 장 상태. 같은 날 JIF 를 받았으면 그 값, 아니면 시계 기준.
-func (m Model) marketStatus() string {
-	if m.jifStatus != "" {
+func (m Model) marketStatus() market.Status {
+	if m.jifKnown {
 		a, b := m.jifAt.In(market.KST), m.now.In(market.KST)
 		if a.Year() == b.Year() && a.YearDay() == b.YearDay() {
 			return m.jifStatus
 		}
 	}
-	return market.Status(m.now)
+	return market.At(m.now)
 }
 
 // View 는 view.go 에 있다.

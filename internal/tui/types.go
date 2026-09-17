@@ -4,6 +4,7 @@ package tui
 import (
 	"time"
 
+	"github.com/gong-yeongbin/my-trading/internal/market"
 	"github.com/gong-yeongbin/my-trading/internal/settings"
 )
 
@@ -94,9 +95,9 @@ type FetchStatusMsg struct {
 	Done, Total int
 }
 
-// MarketStatusMsg 는 LS 장운영정보를 문구로 바꾼 것 (장전/장중/동시호가/장마감/시간외). 그날 안에서는 시계 판정보다 우선한다.
+// MarketStatusMsg 는 LS 장운영정보를 장 상태로 바꾼 것. 그날 안에서는 시계 판정보다 우선한다.
 type MarketStatusMsg struct {
-	Status string
+	Status market.Status
 }
 
 // ConnectedMsg 는 실시간 연결(LS)이 되어 구독까지 끝났을 때. 데이터가 오기 전까지 "연결됨 · 대기" 로 보인다.
