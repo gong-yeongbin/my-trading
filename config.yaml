@@ -1,10 +1,11 @@
 db_path: data/market.db
 
 kis:
-  env: demo                    # demo: 모의투자 / real: 실전
-  token_cache: data/token.json
-  requests_per_second: 0       # 0 이면 env 기본값 (demo 1.5, real 15)
-  # 앱키는 .env 의 KIS_APP_KEY, KIS_APP_SECRET. 계좌번호는 KIS_ACCOUNT ("12345678-01")
+  trade_env: demo    # 매매·잔고 서버. 시세 수집은 항상 실전 서버(KIS_REAL_*)
+  token_cache: data/token_real.json       # 시세용 실전
+  trade_token_cache: data/token_demo.json # 매매용
+  requests_per_second: 0       # 0 이면 15 (실전)
+  # 시세용 앱키는 .env 의 KIS_REAL_*. 매매용 앱키는 trade_env 에 따라 KIS_DEMO_* / KIS_REAL_*. TUI 설정 메뉴에서 입력 가능
   balance_poll_seconds: 10     # 장중 보유 종목 갱신 주기
 
 ls:
@@ -23,7 +24,7 @@ universe:
 
 fetch:
   start_date: "2025-09-01"     # 1차(선별 전용): 60일선용 1년치. 백테스트 시 2021-01-01 로 되돌리고 봉을 비운 뒤 재수집
-  daily_at: "04:00"          # TUI 자동 수집 시각 (KST). 전날 봉을 새벽에 받는다
+  daily_at: "02:00"          # TUI 자동 수집 시각 (KST). 전날 봉을 새벽에 받는다
 
 strategy:
   index_ma_days: 20

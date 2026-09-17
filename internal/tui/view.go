@@ -104,6 +104,8 @@ func (m Model) panelLines(w, rows int) []string {
 		title, cols, body = m.watchPanel(w)
 	case panelHoldings:
 		title, cols, body = m.holdingsPanel(w)
+	case panelSettings:
+		title, cols, body = m.settingsPanel(w)
 	default:
 		title, cols, body = m.logPanel(w)
 	}

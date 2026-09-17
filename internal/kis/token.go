@@ -20,6 +20,7 @@ const tokenExpiryLayout = "2006-01-02 15:04:05"
 type cachedToken struct {
 	AccessToken string `json:"access_token"`
 	Expired     string `json:"expired"` // KST, tokenExpiryLayout
+	BaseURL     string `json:"base_url"`
 }
 
 func (t cachedToken) validAt(now time.Time) bool {
@@ -39,7 +40,9 @@ func (c *Client) Token(ctx context.Context) (string, error) {
 	if c.tok != nil && c.tok.validAt(now) {
 		return c.tok.AccessToken, nil
 	}
-	if t, err := c.readTokenCache(); err == nil && t.validAt(now) {
+	// base_url 이 다르면(또는 없으면, 구 형식) 캐시를 무시하고 새로 발급한다 — 시세용/매매용, 모의/실전
+	// 캐시 파일이 섞여 쓰이는 걸 막는다.
+	if t, err := c.readTokenCache(); err == nil && t.BaseURL == c.BaseURL && t.validAt(now) {
 		c.tok = &t
 		return t.AccessToken, nil
 	}
@@ -104,6 +107,7 @@ func (c *Client) readTokenCache() (cachedToken, error) {
 }
 
 func (c *Client) writeTokenCache(t cachedToken) error {
+	t.BaseURL = c.BaseURL
 	if err := os.MkdirAll(filepath.Dir(c.TokenCachePath), 0o755); err != nil {
 		return err
 	}

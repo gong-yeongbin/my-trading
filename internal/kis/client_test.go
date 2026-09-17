@@ -177,6 +177,40 @@ func TestGetRefreshesTokenOn401Once(t *testing.T) {
 	}
 }
 
+// TestGetRefreshesTokenOnTokenErrorCode: msg_cd 가 EGW00121/EGW00123 이면 HTTP 상태가 401 이
+// 아니어도(여기선 500) 토큰을 재발급해 재시도한다.
+func TestGetRefreshesTokenOnTokenErrorCode(t *testing.T) {
+	f := newFakeKIS(t)
+	var n int
+	f.handle("/ping", func(w http.ResponseWriter, r *http.Request) {
+		n++
+		if r.Header.Get("authorization") == "Bearer tok-1" {
+			f.mu.Lock()
+			f.tokenValue = "tok-2"
+			f.mu.Unlock()
+			w.WriteHeader(http.StatusInternalServerError)
+			okJSON(w, `{"rt_cd":"1","msg_cd":"EGW00123","msg1":"기간이 만료된 token"}`)
+			return
+		}
+		okJSON(w, `{"rt_cd":"0","msg_cd":"MCA00000","msg1":"ok"}`)
+	})
+	var out struct{}
+	if err := f.client.get(context.Background(), "/ping", "TR1", nil, &out); err != nil {
+		t.Fatalf("expected success after refresh: %v", err)
+	}
+	if n != 2 || f.calls() != 2 {
+		t.Errorf("requests=%d tokenCalls=%d, want 2 and 2", n, f.calls())
+	}
+	// 재발급 후에도 같은 오류면 포기
+	f.handle("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		okJSON(w, `{"rt_cd":"1","msg_cd":"EGW00121","msg1":"유효하지 않은 token"}`)
+	})
+	if err := f.client.get(context.Background(), "/ping", "TR1", nil, &out); err == nil || !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("expected ErrUnauthorized after second failure, got %v", err)
+	}
+}
+
 func TestGetRetriesRateLimitThenFails(t *testing.T) {
 	f := newFakeKIS(t)
 	var n int

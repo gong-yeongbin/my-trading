@@ -74,13 +74,14 @@ func TestMenuNavigationAndEnter(t *testing.T) {
 		t.Errorf("menu cursor = %d, want %d", m.menuCursor, len(menuLabels)-1)
 	}
 	m, _ = press(m, keyEnter)
-	if m.active != panelLog {
-		t.Errorf("enter should activate log panel, got %v", m.active)
+	if m.active != panelSettings || m.focus != focusPanel {
+		t.Errorf("enter should activate settings panel and focus it, got %v focus=%v", m.active, m.focus)
 	}
+	m, _ = press(m, keyTab) // 메뉴로 복귀
 	m, _ = press(m, keyUp)
 	m, _ = press(m, keyEnter)
-	if m.active != panelHoldings {
-		t.Errorf("enter should activate holdings panel, got %v", m.active)
+	if m.active != panelLog || m.focus != focusPanel {
+		t.Errorf("enter should activate log panel and focus it, got %v focus=%v", m.active, m.focus)
 	}
 }
 

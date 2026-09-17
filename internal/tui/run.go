@@ -16,6 +16,7 @@ import (
 	"github.com/gong-yeongbin/my-trading/internal/logfile"
 	"github.com/gong-yeongbin/my-trading/internal/ls"
 	"github.com/gong-yeongbin/my-trading/internal/market"
+	"github.com/gong-yeongbin/my-trading/internal/settings"
 )
 
 // Run 은 전체 화면 TUI 를 띄우고 종료될 때까지 막는다.
@@ -25,7 +26,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// 취소 가능한 자식 컨텍스트: Run 안에서 시작하는 고루틴들이 q 로 TUI 종료 시 함께 멈추도록.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p := tea.NewProgram(New(), tea.WithAltScreen(), tea.WithContext(ctx))
+	m := New()
+	m.saver = func(v settings.Values) error { return settings.Save(".env", "config.yaml", v) }
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
+	go func() {
+		v, err := settings.Load(".env", "config.yaml")
+		p.Send(SettingsMsg{Values: v, Err: err})
+	}()
 
 	// 로그 파일. 못 열면 TUI 는 계속 뜨고 로그 패널에 오류 한 줄만 보인다 (스펙 11).
 	logger, closer, err := logfile.Open(cfg.Log.File)
@@ -72,13 +79,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// 자동 일봉 수집: 앱키·DB 가 있으면 켤 때 따라잡고, 매일 daily_at 에 돈다.
 	fetchLog := logger.With("kind", "수집")
-	if err := cfg.RequireAppKey(); err != nil {
+	if err := cfg.RequireMarketKey(); err != nil {
 		fetchLog.Warn("자동 수집 비활성: " + err.Error())
 	} else if store, err := data.Open(cfg.DBPath); err != nil {
 		fetchLog.Error("자동 수집 비활성: DB 열기 실패", "err", err)
 	} else {
 		defer store.Close()
-		client := kis.New(cfg.KIS.BaseURL(), cfg.KIS.AppKey, cfg.KIS.AppSecret, cfg.KIS.TokenCache, cfg.KIS.EffectiveRPS())
+		client := kis.New(cfg.KIS.MarketBaseURL(), cfg.KIS.Market.AppKey, cfg.KIS.Market.AppSecret, cfg.KIS.TokenCache, cfg.KIS.MarketRPS())
 		stale := func() (bool, error) {
 			last, has, err := store.LastIndexBarDate(ctx, "kospi")
 			if err != nil {

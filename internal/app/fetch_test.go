@@ -177,41 +177,92 @@ func TestRunFetchStopsOnIndexFailure(t *testing.T) {
 	}
 }
 
-func TestRunFetchSkipsSymbolsWhenIndexUnchanged(t *testing.T) {
+func TestRunFetchFetchesOnlySymbolsBehindIndex(t *testing.T) {
 	ctx := context.Background()
+	today := data.Date(2024, 9, 10)
+	setupSymbols := func(store *data.SQLiteStore) {
+		store.UpsertSymbols(ctx, []data.Symbol{
+			{Code: "A", Name: "A", Market: "kospi"},
+			{Code: "B", Name: "B", Market: "kospi"},
+			{Code: "C", Name: "C", Market: "kospi"},
+		})
+	}
+
+	// 지수는 무변화(휴장일)지만 종목별로 뒤처진 정도가 다르면, 뒤처진 종목만 호출한다.
 	store := openStore(t)
-	store.UpsertSymbols(ctx, []data.Symbol{{Code: "005930", Name: "삼성전자", Market: "kospi"}})
-	yesterday := data.Date(2024, 9, 9)
-	if err := store.UpsertIndexBars(ctx, "kospi", []data.IndexBar{{Date: yesterday, Open: 1, High: 1, Low: 1, Close: 1}}); err != nil {
+	setupSymbols(store)
+	if err := store.UpsertIndexBars(ctx, "kospi", []data.IndexBar{{Date: data.Date(2024, 9, 9), Open: 1, High: 1, Low: 1, Close: 1}}); err != nil {
 		t.Fatal(err)
 	}
-	today := data.Date(2024, 9, 10)
+	store.UpsertBars(ctx, "A", []data.Bar{{Date: data.Date(2024, 9, 9), Open: 1, High: 1, Low: 1, Close: 1, Volume: 1}}) // A: 지수와 동일 → 호출 없음
+	store.UpsertBars(ctx, "C", []data.Bar{{Date: data.Date(2024, 9, 6), Open: 1, High: 1, Low: 1, Close: 1, Volume: 1}}) // C: 뒤처짐 → 호출
+	// B: 봉 없음 → 호출
 
-	src := &fakeBars{noIndexBars: true} // 지수에 새 봉 없음 (휴장일)
-	res, err := RunFetch(ctx, fetchConfig(), store, src, FetchOptions{Today: today, SkipSymbolsIfIndexUnchanged: true}, nil)
+	src := &fakeBars{noIndexBars: true}
+	var progress []FetchProgress
+	res, err := RunFetch(ctx, fetchConfig(), store, src, FetchOptions{Today: today}, func(p FetchProgress) { progress = append(progress, p) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Skipped || res.Symbols != 0 {
-		t.Errorf("expected Skipped, got %+v", res)
+	if res.Symbols != 2 || res.UpToDate != 1 || res.Skipped {
+		t.Errorf("result = %+v", res)
 	}
+	barCalls := map[string]bool{}
 	for _, c := range src.calls {
 		if c.kind == "bar" {
-			t.Errorf("symbol should not be called: %+v", src.calls)
+			barCalls[c.key] = true
+		}
+	}
+	if len(barCalls) != 2 || barCalls["A"] || !barCalls["B"] || !barCalls["C"] {
+		t.Errorf("bar calls = %+v", src.calls)
+	}
+	if len(progress) != 3 || progress[0].Total != 3 || progress[2].Done != 3 {
+		t.Errorf("progress = %+v", progress)
+	}
+	for _, p := range progress {
+		if p.Err != nil {
+			t.Errorf("progress err = %+v", p)
 		}
 	}
 
-	// 옵션이 꺼져 있으면 지수가 비어도 종목을 호출한다
+	// 세 종목 모두 지수와 동일하게 최신이면 전혀 호출하지 않고 Skipped == true.
+	store2 := openStore(t)
+	setupSymbols(store2)
+	if err := store2.UpsertIndexBars(ctx, "kospi", []data.IndexBar{{Date: data.Date(2024, 9, 9), Open: 1, High: 1, Low: 1, Close: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"A", "B", "C"} {
+		store2.UpsertBars(ctx, code, []data.Bar{{Date: data.Date(2024, 9, 9), Open: 1, High: 1, Low: 1, Close: 1, Volume: 1}})
+	}
 	src2 := &fakeBars{noIndexBars: true}
-	res, err = RunFetch(ctx, fetchConfig(), store, src2, FetchOptions{Today: today}, nil)
-	if err != nil || res.Skipped || res.Symbols != 1 {
-		t.Errorf("without option: %+v %v", res, err)
+	res, err = RunFetch(ctx, fetchConfig(), store2, src2, FetchOptions{Today: today}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Skipped || res.UpToDate != 3 {
+		t.Errorf("result = %+v", res)
+	}
+	for _, c := range src2.calls {
+		if c.kind == "bar" {
+			t.Errorf("no symbol should be called: %+v", src2.calls)
+		}
 	}
 
-	// 지수에 새 봉이 있으면 옵션이 켜져 있어도 종목을 호출한다
+	// 지수에 저장된 봉이 전혀 없으면 latest = today 가 되어, 봉 없는 종목은 모두 호출된다.
+	store3 := openStore(t)
+	setupSymbols(store3)
 	src3 := &fakeBars{}
-	res, err = RunFetch(ctx, fetchConfig(), store, src3, FetchOptions{Today: today, SkipSymbolsIfIndexUnchanged: true}, nil)
-	if err != nil || res.Skipped || res.Symbols != 1 {
-		t.Errorf("with new index bars: %+v %v", res, err)
+	res, err = RunFetch(ctx, fetchConfig(), store3, src3, FetchOptions{Today: today}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	barCalls3 := map[string]bool{}
+	for _, c := range src3.calls {
+		if c.kind == "bar" {
+			barCalls3[c.key] = true
+		}
+	}
+	if len(barCalls3) != 3 || res.Symbols != 3 || res.UpToDate != 0 {
+		t.Errorf("result = %+v, bar calls = %+v", res, src3.calls)
 	}
 }

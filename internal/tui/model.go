@@ -3,9 +3,11 @@ package tui
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gong-yeongbin/my-trading/internal/market"
+	"github.com/gong-yeongbin/my-trading/internal/settings"
 )
 
 type focus int
@@ -21,10 +23,11 @@ const (
 	panelWatch panel = iota
 	panelHoldings
 	panelLog
+	panelSettings
 	panelCount
 )
 
-var menuLabels = [panelCount]string{"관심종목", "보유종목", "로그"}
+var menuLabels = [panelCount]string{"관심종목", "보유종목", "로그", "설정"}
 
 // 고정 줄 수: 상단 괘선, 뉴스, 괘선, (본문), 괘선, 하단 정보, 괘선
 const chromeLines = 6
@@ -61,10 +64,21 @@ type Model struct {
 	holdings  HoldingsMsg
 	logs      []LogLine
 	fetch     FetchStatusMsg
+
+	settings    settings.Values
+	settingsErr error
+	settingsMsg string
+	editing     bool
+	input       textinput.Model
+	saver       func(settings.Values) error
 }
 
 func New() Model {
-	return Model{now: time.Now()}
+	ti := textinput.New()
+	ti.Prompt = ""
+	ti.CharLimit = 128
+	ti.Width = 40
+	return Model{now: time.Now(), input: ti}
 }
 
 func tick() tea.Cmd {
@@ -82,7 +96,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.now = time.Time(msg)
 		return m, tick()
 	case tea.KeyMsg:
+		if m.editing {
+			return m.handleEditKey(msg)
+		}
 		return m.handleKey(msg)
+	case SettingsMsg:
+		m.settings, m.settingsErr = msg.Values, msg.Err
 	case NewsMsg:
 		m.news, m.newsOK = msg, true
 	case IndexMsg:
@@ -122,6 +141,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.newsOK = false
 		m.kospi.Connected = false
 		m.kosdaq.Connected = false
+	default:
+		if m.editing {
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -151,6 +176,9 @@ func (m Model) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.focus == focusMenu {
 			m.active = panel(m.menuCursor)
+			m.focus = focusPanel // 고른 패널로 바로 들어간다. Tab 으로 메뉴 복귀
+		} else if m.active == panelSettings {
+			return m.settingsEnter()
 		}
 	}
 	m.clampScroll()
@@ -163,6 +191,8 @@ func (m Model) rowCount(p panel) int {
 		return len(m.watch.Rows)
 	case panelHoldings:
 		return len(m.holdings.Rows)
+	case panelSettings:
+		return int(settings.FieldCount)
 	default:
 		return len(m.logs)
 	}

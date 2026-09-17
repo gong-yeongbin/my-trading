@@ -106,10 +106,10 @@ func runLSProbe(ctx context.Context, cfg *config.Config, args []string) error {
 }
 
 func newClient(cfg *config.Config) (*kis.Client, error) {
-	if err := cfg.RequireAppKey(); err != nil {
+	if err := cfg.RequireMarketKey(); err != nil {
 		return nil, err
 	}
-	return kis.New(cfg.KIS.BaseURL(), cfg.KIS.AppKey, cfg.KIS.AppSecret, cfg.KIS.TokenCache, cfg.KIS.EffectiveRPS()), nil
+	return kis.New(cfg.KIS.MarketBaseURL(), cfg.KIS.Market.AppKey, cfg.KIS.Market.AppSecret, cfg.KIS.TokenCache, cfg.KIS.MarketRPS()), nil
 }
 
 // openLogger 는 로그 파일을 연다. 열 수 없으면 stderr 로 대신 기록하며 경고를 찍는다 (spec §11).
@@ -181,10 +181,10 @@ func runFetch(ctx context.Context, cfg *config.Config, args []string) error {
 	}
 	defer store.Close()
 
-	logger.Info("일봉 수집 시작", "env", cfg.KIS.Env, "from", *fromStr)
+	logger.Info("일봉 수집 시작", "server", "real", "from", *fromStr)
 
 	started := time.Now()
-	fmt.Fprintf(os.Stderr, "[%s] 지수 일봉 수집 중...\n", cfg.KIS.Env)
+	fmt.Fprint(os.Stderr, "[real] 지수 일봉 수집 중...\n")
 	res, err := app.RunFetch(ctx, cfg, store, client, opts, func(p app.FetchProgress) {
 		if p.Err != nil {
 			fmt.Fprintf(os.Stderr, "\r[%d/%d] %s 실패: %v\n", p.Done, p.Total, p.Code, p.Err)
@@ -204,7 +204,7 @@ func runFetch(ctx context.Context, cfg *config.Config, args []string) error {
 		return err
 	}
 	elapsed := time.Since(started).Round(time.Second)
-	fmt.Printf("종목 %d 성공, 봉 %d 저장, 실패 %d, 소요 %s\n", res.Symbols, res.Bars, len(res.Failures), elapsed)
+	fmt.Printf("종목 %d 성공, 최신 %d, 봉 %d 저장, 실패 %d, 소요 %s\n", res.Symbols, res.UpToDate, res.Bars, len(res.Failures), elapsed)
 	for _, f := range res.Failures {
 		fmt.Printf("  실패 %s: %v\n", f.Code, f.Err)
 	}

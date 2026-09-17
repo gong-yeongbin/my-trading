@@ -18,6 +18,14 @@ const (
 	maxRateRetries = 3
 )
 
+// tokenErrorMsgCds 는 HTTP 상태와 무관하게 401 처럼 토큰을 재발급해야 하는 msg_cd.
+var tokenErrorMsgCds = map[string]bool{"EGW00121": true, "EGW00123": true}
+
+// isTokenError 는 401 이거나 토큰 오류 msg_cd 인지 본다.
+func isTokenError(status int, msgCd string) bool {
+	return status == http.StatusUnauthorized || tokenErrorMsgCds[msgCd]
+}
+
 // ErrUnauthorized 는 토큰 재발급 후에도 401 이 나서 포기할 때 반환된다 (spec §11).
 var ErrUnauthorized = errors.New("kis: 인증 실패 (앱키 또는 토큰)")
 
@@ -57,7 +65,8 @@ type envelope struct {
 }
 
 // get 은 GET 호출을 수행하고 out 에 응답 JSON 을 넣는다.
-// 401 은 토큰을 한 번 재발급해 재시도, EGW00201 은 retryWait 후 최대 maxRateRetries 회 재시도한다.
+// 401 이거나 msg_cd 가 EGW00121/EGW00123(토큰 만료·오류, HTTP 상태와 무관)이면 토큰을 한 번
+// 재발급해 재시도한다. EGW00201 은 retryWait 후 최대 maxRateRetries 회 재시도한다.
 func (c *Client) get(ctx context.Context, path, trID string, params url.Values, out any) error {
 	refreshed := false
 	rateRetries := 0
@@ -70,16 +79,16 @@ func (c *Client) get(ctx context.Context, path, trID string, params url.Values, 
 		if err != nil {
 			return err
 		}
-		if status == http.StatusUnauthorized {
+		var env envelope
+		_ = json.Unmarshal(body, &env)
+		if isTokenError(status, env.MsgCd) {
 			if refreshed {
-				return fmt.Errorf("%w: kis: %s: 401 after token refresh: %s", ErrUnauthorized, path, body)
+				return fmt.Errorf("%w: kis: %s: unauthorized after token refresh (HTTP %d, %s): %s", ErrUnauthorized, path, status, env.MsgCd, body)
 			}
 			refreshed = true
 			c.invalidateToken()
 			continue
 		}
-		var env envelope
-		_ = json.Unmarshal(body, &env)
 		if env.MsgCd == rateLimitMsgCd {
 			rateRetries++
 			if rateRetries > maxRateRetries {

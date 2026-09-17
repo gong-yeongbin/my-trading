@@ -49,13 +49,13 @@ func fetchLoop(ctx context.Context, clock func() time.Time, stale func() (bool, 
 
 // runFetchOnce 는 app.RunFetch 를 한 번 돌리며 진행을 화면과 로그에 보낸다.
 func runFetchOnce(ctx context.Context, cfg *config.Config, store data.Store, src app.BarSource, logger *slog.Logger, send func(tea.Msg)) {
-	logger.Info("자동 수집 시작", "env", cfg.KIS.Env)
+	logger.Info("자동 수집 시작", "server", "real")
 	send(FetchStatusMsg{Running: true})
 	started := time.Now()
 	// 장중에 켜도 오늘의 미완성 봉을 저장하지 않도록 어제까지만.
 	now := time.Now().In(data.KST)
 	yesterday := data.Date(now.Year(), now.Month(), now.Day()).AddDate(0, 0, -1)
-	res, err := app.RunFetch(ctx, cfg, store, src, app.FetchOptions{Today: yesterday, SkipSymbolsIfIndexUnchanged: true}, func(p app.FetchProgress) {
+	res, err := app.RunFetch(ctx, cfg, store, src, app.FetchOptions{Today: yesterday}, func(p app.FetchProgress) {
 		if p.Err != nil {
 			logger.Warn("종목 수집 실패", "code", p.Code, "err", p.Err)
 		}
@@ -68,8 +68,8 @@ func runFetchOnce(ctx context.Context, cfg *config.Config, store data.Store, src
 	case err != nil:
 		logger.Error("자동 수집 중단", "err", err)
 	case res.Skipped:
-		logger.Info("자동 수집 건너뜀 (지수 새 봉 없음 — 휴장일 또는 이미 최신)")
+		logger.Info("자동 수집 건너뜀 (모든 종목 최신)")
 	default:
-		logger.Info("자동 수집 완료", "symbols", res.Symbols, "bars", res.Bars, "failed", len(res.Failures), "elapsed", time.Since(started).Round(time.Second).String())
+		logger.Info("자동 수집 완료", "symbols", res.Symbols, "up_to_date", res.UpToDate, "bars", res.Bars, "failed", len(res.Failures), "elapsed", time.Since(started).Round(time.Second).String())
 	}
 }

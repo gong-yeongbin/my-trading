@@ -1,7 +1,11 @@
 // Package tui 는 bubbletea 전체 화면 하나를 그린다. 계산은 하지 않고 메시지로 받은 값만 표시한다.
 package tui
 
-import "time"
+import (
+	"time"
+
+	"github.com/gong-yeongbin/my-trading/internal/settings"
+)
 
 // WatchRow 는 관심종목 패널 한 줄. 7단계에서 screener.WatchItem 을 여기로 옮긴다.
 type WatchRow struct {
@@ -70,6 +74,12 @@ type HoldingsMsg struct {
 // LogMsg 는 최신순으로 정렬된 전체 목록을 담는다 (증분 아님).
 type LogMsg struct {
 	Lines []LogLine
+}
+
+// SettingsMsg 는 시작 시 읽은 설정 값. Err 가 있으면 패널에 오류를 보인다.
+type SettingsMsg struct {
+	Values settings.Values
+	Err    error
 }
 
 // FetchStatusMsg 는 자동 일봉 수집의 진행 상태. Running 이 false 면 하단 표시를 지운다.
