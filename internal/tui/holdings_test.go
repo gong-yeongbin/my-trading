@@ -21,14 +21,14 @@ func TestHoldingsMsgFromSortsAndMaps(t *testing.T) {
 			{Code: "005930", Name: "삼성전자", Qty: 58, AvgPrice: 71200, Price: 72900, PnL: 98600, PnLPct: 0.024},
 			{Code: "005380", Name: "현대차", Qty: 16, AvgPrice: 245000, Price: 264300, PnL: 308800, PnLPct: 0.079},
 		},
-		Total: 12480000, Cash: 7520000, PnL: 312000,
+		Total: 12480000, Purchase: 12168000, Cash: 7520000, PnL: 312000,
 	}
 	mk := map[string]string{"005930": "kospi", "247540": "kosdaq"}
 	msg := holdingsMsgFrom(b, func(code string) string { return mk[code] })
 	if !msg.Connected || msg.Summary.Total != 12480000 || msg.Summary.Cash != 7520000 || msg.Summary.PnL != 312000 {
 		t.Errorf("summary = %+v", msg.Summary)
 	}
-	if msg.Summary.PnLPct < 0.0256 || msg.Summary.PnLPct > 0.0257 { // 312000 / (12480000-312000)
+	if msg.Summary.PnLPct < 0.0256 || msg.Summary.PnLPct > 0.0257 { // 312000 / 12168000
 		t.Errorf("PnLPct = %v", msg.Summary.PnLPct)
 	}
 	// 평가금액 순: 현대차 4,228,800 > 삼성전자 4,228,200 > 에코프로비엠 3,844,000
@@ -109,5 +109,32 @@ func TestHoldingsLoopKeepsLastOnErrorAndReportsFirstFailure(t *testing.T) {
 	}
 	if second := msgs[1].(HoldingsMsg); !second.Connected || len(second.Rows) != 1 {
 		t.Errorf("second = %+v", second)
+	}
+}
+
+func TestHoldingsLoopRetriesOffHoursUntilFirstSuccess(t *testing.T) {
+	var fetches atomic.Int32
+	// 장마감(20:00). 호출마다 시계가 1분씩 흐른다 → 재시도 간격을 매 틱 넘긴다.
+	base := time.Date(2026, 9, 17, 20, 0, 0, 0, market.KST)
+	var step atomic.Int32
+	now := func() time.Time { return base.Add(time.Duration(step.Add(1)) * time.Minute) }
+	fetch := func(context.Context) (HoldingsMsg, error) {
+		if fetches.Add(1) < 3 {
+			return HoldingsMsg{}, errors.New("boom")
+		}
+		return HoldingsMsg{Connected: true}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		holdingsLoop(ctx, 5*time.Millisecond, now, fetch, func(tea.Msg) {}, slog.New(slog.DiscardHandler))
+		close(done)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	<-done
+	// 실패 2회 뒤 3회째 성공, 이후 장외라 더 조회하지 않는다.
+	if got := fetches.Load(); got != 3 {
+		t.Errorf("fetches = %d, want 3", got)
 	}
 }

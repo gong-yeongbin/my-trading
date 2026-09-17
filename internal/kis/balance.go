@@ -38,10 +38,11 @@ type Position struct {
 	PnLPct     float64
 }
 
-// Balance 는 계좌 잔고. Total 평가금액, Cash 예수금, PnL 평가손익 합계.
+// Balance 는 계좌 잔고. Total 유가증권 평가금액 합계(예수금 제외), Purchase 매입금액 합계, Cash 예수금, PnL 평가손익 합계.
 type Balance struct {
 	Positions []Position
 	Total     int64
+	Purchase  int64
 	Cash      int64
 	PnL       int64
 }
@@ -59,9 +60,10 @@ type balanceResp struct {
 		PnLPct   string `json:"evlu_pfls_rt"`
 	} `json:"output1"`
 	Output2 []struct {
-		Total string `json:"tot_evlu_amt"`
-		Cash  string `json:"dnca_tot_amt"`
-		PnL   string `json:"evlu_pfls_smtl_amt"`
+		Total    string `json:"evlu_amt_smtl_amt"`
+		Purchase string `json:"pchs_amt_smtl_amt"`
+		Cash     string `json:"dnca_tot_amt"`
+		PnL      string `json:"evlu_pfls_smtl_amt"`
 	} `json:"output2"`
 }
 
@@ -97,7 +99,7 @@ func (c *Client) Balance(ctx context.Context, acct Account, demo bool) (Balance,
 			})
 		}
 		if len(resp.Output2) > 0 {
-			out.Total, out.Cash, out.PnL = num(resp.Output2[0].Total), num(resp.Output2[0].Cash), num(resp.Output2[0].PnL)
+			out.Total, out.Purchase, out.Cash, out.PnL = num(resp.Output2[0].Total), num(resp.Output2[0].Purchase), num(resp.Output2[0].Cash), num(resp.Output2[0].PnL)
 		}
 		if next != "F" && next != "M" {
 			break

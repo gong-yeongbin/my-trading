@@ -247,7 +247,8 @@ type Store interface {
 - `GET /uapi/domestic-stock/v1/trading/inquire-balance`
 - 헤더: 일봉과 동일, `tr_id: TTTC8434R`(실전) / `VTTC8434R`(모의)
 - 파라미터: `CANO`, `ACNT_PRDT_CD`, `AFHR_FLPR_YN=N`, `OFL_YN=`, `INQR_DVSN=02`, `UNPR_DVSN=01`, `FUND_STTL_ICLD_YN=N`, `FNCG_AMT_AUTO_RDPT_YN=N`, `PRCS_DVSN=01`, `CTX_AREA_FK100=`, `CTX_AREA_NK100=`
-- 응답 `output1`(종목별): `pdno`, `prdt_name`, `hldg_qty`, `pchs_avg_pric`, `prpr`, `evlu_pfls_amt`, `evlu_pfls_rt`. `output2`(계좌 합계): `tot_evlu_amt`, `dnca_tot_amt`(예수금), `evlu_pfls_smtl_amt`
+- 응답 `output1`(종목별): `pdno`, `prdt_name`, `hldg_qty`, `pchs_avg_pric`, `prpr`, `evlu_pfls_amt`, `evlu_pfls_rt`. `output2`(계좌 합계): `evlu_amt_smtl_amt`(유가증권 평가금액 합계 — 화면의 "평가금액"), `pchs_amt_smtl_amt`(매입금액 합계 — 수익률 분모), `dnca_tot_amt`(예수금), `evlu_pfls_smtl_amt`(평가손익 합계). `tot_evlu_amt`는 예수금이 섞여 있어 쓰지 않는다.
+- 응답 헤더 `tr_cont`가 `F`/`M`이면 다음 페이지가 있다. 응답의 `ctx_area_fk100`/`ctx_area_nk100`을 그대로 넣고 요청 헤더 `tr_cont: N`으로 이어받는다(최대 20페이지).
 - 보유 수량 0인 행은 건너뛴다. 시장 구분은 `symbols` 테이블에서 찾는다.
 - 보유일은 잔고 응답에 없다. 우리 프로그램의 매매 로그(나중 단계)에서 진입일을 찾아 계산하고, 없으면 `-`로 표시한다.
 
@@ -373,7 +374,7 @@ type WatchItem struct {
 | 패널 | 제목 줄 | 표 | 출처 | 갱신 |
 |---|---|---|---|---|
 | 관심종목 | 기준일, 종목 수, 시장 필터 상태 (전일 지수 종가 vs 20일선 → 시장별 `진입가능` / `차단`) | 종목명, 시장, 전일종가, 필요종가, 필요상승, 필요거래량. `MinChangePct` 오름차순 | `screener`, SQLite | 시작 시 1회 + 자동 수집 완료 후 재계산 (`screener.Run`) |
-| 보유종목 | 종목 수, 평가금액, 손익(금액·%), 현금 | 종목명, 시장, 수량, 매입가, 현재가, 손익, 수익률, 보유일 | `kis` 잔고 조회 (7.6절) | 장중(09:00~15:30) `balance_poll_seconds`마다, 장외는 시작 시 1회. 보유 없으면 `보유 없음` |
+| 보유종목 | 종목 수, 평가금액, 손익(금액·%), 현금 | 종목명, 시장, 수량, 매입가, 현재가, 손익, 수익률, 보유일 | `kis` 잔고 조회 (7.6절), `trade_env` 서버·키·계좌 | 시작 시 1회, 거래 시간대(`market.At(now).Trading()`: 장중·동시호가, 시계 기준)에는 `balance_poll_seconds`마다, 거래 시간대가 끝난 직후 1회 더(종가 반영). 실패하면 로그만 남기고 마지막 값 유지, 한 번도 성공 못 했으면 `미연결`로 두고 장외에도 1분마다 재시도. 정렬은 평가금액(현재가×수량) 큰 순. 보유 없으면 `보유 없음` |
 | 로그 | `최신순` | 시각, 종류 태그, 메시지 | `data/trader.log` (10.3절) | 파일에 줄이 추가되면 1초 안에 반영 |
 | 설정 | `Enter 편집/토글 · Esc 취소`, 저장·오류 문구 | 항목 11개(매매 서버 demo/real, 한투 모의·실전 앱키·시크릿·계좌, LS 앱키·시크릿, 자동 수집 시각, 수집 시작일)와 값. 앱키·시크릿은 앞 4자+`****`, 입력 중 `*`(편집은 빈 칸에서 시작, Esc 면 기존 값 유지). 서버 항목은 Enter 로 토글 즉시 저장, 나머지는 Enter 편집 → Enter 저장(검증 실패 시 문구) / Esc 취소. 저장은 `.env`·`config.yaml`에 쓰고 `저장됨 · 재시작하면 적용됩니다` | `settings` | 시작 시 1회 읽음, 저장 시 갱신 |
 
@@ -394,7 +395,7 @@ type WatchItem struct {
 - 수신 메시지는 `chan Event`(`News`, `Index`, `Connected`, `Disconnected`)로 넘기고 TUI가 `tea.Msg`로 바꾼다. 클라이언트는 TUI를 모른다.
 - 연결이 끊기면 1초 후 재연결하고 실패할 때마다 간격을 2배로 늘려 최대 60초까지 기다린다 (거부·장애 시 서버를 두드리지 않기 위해). 연결에 성공했던 뒤에는 1초로 되돌린다. 재연결 후 구독을 다시 보낸다. 연결·끊김·재연결을 `*slog.Logger`로 남긴다 (파일 로거는 3단계, 그전엔 폐기 로거).
 - 앱키가 없으면 클라이언트를 만들지 않고 TUI는 `미연결`로 표시한다. TUI 는 `Connected` 를 받으면 데이터가 오기 전까지 뉴스 줄 `연결됨 · 뉴스 대기`, 지수 줄 `연결됨 · 장외`로, `Disconnected` 를 받으면 전부 `미연결`로 표시한다.
-- 장운영정보 `JIF`(`tr_key` 1 코스피, 2 코스닥; body `jangubun`, `jstatus`)는 `MarketStatus{Market, Code}` 이벤트로 넘긴다. TUI 는 `market.FromJIF` 코드표(11 장전, 21 장중, 31 동시호가, 41 장마감, 51·61 시간외, 52·62 장마감 — xingAPI 관례, 실서버 관측 후 보정)로 하단 장 상태를 덮어쓰고 `kind=지수` 로그를 남긴다. 표에 없는 코드는 로그만. 8단계 잔고 폴링 시간대 판정에도 쓴다.
+- 장운영정보 `JIF`(`tr_key` 1 코스피, 2 코스닥; body `jangubun`, `jstatus`)는 `MarketStatus{Market, Code}` 이벤트로 넘긴다. TUI 는 `market.FromJIF` 코드표(11 장전, 21 장중, 31 동시호가, 41 장마감, 51·61 시간외, 52·62 장마감 — xingAPI 관례, 실서버 관측 후 보정)로 하단 장 상태를 덮어쓰고 `kind=지수` 로그를 남긴다. 표에 없는 코드는 로그만. 잔고 폴링 시간대는 JIF 가 아니라 시계(`market.At`)로만 판정한다.
 
 ### 10.3 로그 파일
 
@@ -416,7 +417,7 @@ type WatchItem struct {
 - 초당 제한 초과: 1초 대기 후 최대 3회 재시도.
 - `watch`와 TUI: 봉이 부족한 종목은 조용히 건너뛴다. 지수 봉이 하나도 없으면 시장 필터 상태를 `알 수 없음`으로 표시한다. 설정값이 범위를 벗어나면(비율 음수, `ma_short_days >= ma_long_days` 등) 모든 명령이 시작 전에 실패한다.
 - 실전 키(`KIS_REAL_APP_KEY`/`KIS_REAL_APP_SECRET`)가 없으면 시세를 쓰는 `universe`, `fetch`, TUI 자동 수집은 시작 전에 실패·비활성한다(모의 fallback 없음). `watch`는 앱키 없이 동작한다. 매매 키(`trade_env`에 따른 `KIS_DEMO_*`/`KIS_REAL_*`)는 8단계(매매·잔고)에만 필요하다.
-- TUI는 앱키·계좌번호 없이 시작된다. 매매 키나 `KIS_DEMO_ACCOUNT`/`KIS_REAL_ACCOUNT`(`trade_env`에 따라)가 없으면 보유 종목 패널에 `미연결`, LS 앱키가 없거나 웹소켓이 끊기면 뉴스 줄에 `미연결`, 지수 줄에 전일 종가와 `(전일)`을 표시한다. 잔고 조회 실패는 로그에 남기고 다음 주기에 다시 시도한다. 어떤 경우에도 TUI는 종료하지 않는다.
+- TUI는 앱키·계좌번호 없이 시작된다. 매매 키나 `KIS_DEMO_ACCOUNT`/`KIS_REAL_ACCOUNT`(`trade_env`에 따라)가 없으면 보유 종목 패널에 `미연결`, LS 앱키가 없거나 웹소켓이 끊기면 뉴스 줄에 `미연결`, 지수 줄에 전일 종가와 `(전일)`을 표시한다. 잔고 조회 실패는 로그에 남기고 다음 주기에 다시 시도한다(첫 성공 전이면 장외에도 1분마다). 어떤 경우에도 TUI는 종료하지 않는다.
 - TUI 자동 수집: 실전 앱키(`KIS_REAL_*`)나 DB 가 없으면 비활성(`kind=수집` 로그 한 줄). 지수 2건을 먼저 받아 새 봉이 없으면(주말·공휴일·이미 최신) 종목 호출을 건너뛴다. 종목 하나 실패는 로그만 남기고 계속, 인증 실패는 중단. `q` 종료 시 수집 중이던 종목 이후는 다음 실행에서 이어받는다. 잠자기 중 타이머 지연을 피하려고 1분 단위로 벽시계를 다시 잰다.
 - 설정 메뉴: 저장 실패·검증 실패는 패널 제목 줄에 표시하고 TUI 는 계속. 설정 파일 읽기 실패면 편집을 막는다. 저장은 임시 파일 + rename 으로 원자적이며 config.yaml → .env 순서로 쓴다.
 - 모든 서브커맨드와 TUI는 10.3절의 로그 파일에 기록한다. 서브커맨드는 파일을 열 수 없으면 stderr로 대신 쓰고 계속 진행한다. TUI 는 10.3절대로 로거를 버리고 로그 패널에 오류 한 줄을 보인다.

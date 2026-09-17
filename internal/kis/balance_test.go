@@ -24,12 +24,12 @@ const balancePage1 = `{"rt_cd":"0","msg_cd":"KIOK0510","msg1":"조회되었습�
   {"pdno":"005930","prdt_name":"삼성전자","hldg_qty":"58","pchs_avg_pric":"71200.0000","prpr":"72900","evlu_pfls_amt":"98600","evlu_pfls_rt":"2.40"},
   {"pdno":"000660","prdt_name":"SK하이닉스","hldg_qty":"0","pchs_avg_pric":"0.0000","prpr":"180000","evlu_pfls_amt":"0","evlu_pfls_rt":"0.00"}
  ],
- "output2":[{"tot_evlu_amt":"12480000","dnca_tot_amt":"7520000","evlu_pfls_smtl_amt":"312000"}]}`
+ "output2":[{"tot_evlu_amt":"20000000","evlu_amt_smtl_amt":"12480000","pchs_amt_smtl_amt":"12168000","dnca_tot_amt":"7520000","evlu_pfls_smtl_amt":"312000"}]}`
 
 const balancePage2 = `{"rt_cd":"0","msg_cd":"KIOK0510","msg1":"조회되었습니다",
  "ctx_area_fk100":"","ctx_area_nk100":"",
  "output1":[{"pdno":"247540","prdt_name":"에코프로비엠","hldg_qty":"40","pchs_avg_pric":"98500.5000","prpr":"96100","evlu_pfls_amt":"-96020","evlu_pfls_rt":"-2.44"}],
- "output2":[{"tot_evlu_amt":"12480000","dnca_tot_amt":"7520000","evlu_pfls_smtl_amt":"312000"}]}`
+ "output2":[{"tot_evlu_amt":"20000000","evlu_amt_smtl_amt":"12480000","pchs_amt_smtl_amt":"12168000","dnca_tot_amt":"7520000","evlu_pfls_smtl_amt":"312000"}]}`
 
 func TestBalancePagesAndParses(t *testing.T) {
 	f := newFakeKIS(t)
@@ -78,7 +78,7 @@ func TestBalancePagesAndParses(t *testing.T) {
 	if b.Positions[1].AvgPrice != 98501 || b.Positions[1].PnL != -96020 { // 98500.5 반올림
 		t.Errorf("position 2 = %+v", b.Positions[1])
 	}
-	if b.Total != 12480000 || b.Cash != 7520000 || b.PnL != 312000 {
+	if b.Total != 12480000 || b.Purchase != 12168000 || b.Cash != 7520000 || b.PnL != 312000 {
 		t.Errorf("summary = %+v", b)
 	}
 }
