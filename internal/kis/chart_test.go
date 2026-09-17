@@ -94,7 +94,7 @@ func TestDailyBarsStopsOnEmptyResponse(t *testing.T) {
 	f.handle("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		calls = append(calls, [2]string{q.Get("FID_INPUT_DATE_1"), q.Get("FID_INPUT_DATE_2")})
-		if q.Get("FID_INPUT_DATE_1") < "20240101" { // 첫 청크(20240416~)는 데이터, 둘째 청크(20231128~)는 빈 응답
+		if q.Get("FID_INPUT_DATE_2") < "20240902" { // 첫 청크(~20240902)는 데이터 1건, 그 전날부터 시작하는 둘째 청크는 빈 응답
 			json.NewEncoder(w).Encode(map[string]any{"rt_cd": "0", "msg_cd": "MCA00000", "msg1": "ok", "output2": []any{}})
 			return
 		}
@@ -150,5 +150,32 @@ func TestIndexBars(t *testing.T) {
 	f.client.IndexBars(context.Background(), "kospi", data.Date(2024, 9, 1), data.Date(2024, 9, 3))
 	if gotCode != "0001" {
 		t.Errorf("kospi index code = %q, want 0001", gotCode)
+	}
+}
+
+// 실서버 지수 API 는 한 번에 50건만 돌려준다. 청크가 그보다 넓어도 빠짐없이 이어받아야 한다.
+func TestIndexBarsFollowsOldestReturnedRow(t *testing.T) {
+	f := newFakeKIS(t)
+	var calls [][2]string
+	f.handle("/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		d1, d2 := q.Get("FID_INPUT_DATE_1"), q.Get("FID_INPUT_DATE_2")
+		calls = append(calls, [2]string{d1, d2})
+		from, _ := time.ParseInLocation("20060102", d1, data.KST)
+		to, _ := time.ParseInLocation("20060102", d2, data.KST)
+		days := businessDays(from, to)
+		var rows []map[string]string
+		for i := len(days) - 1; i >= 0 && len(rows) < 50; i-- {
+			rows = append(rows, map[string]string{"stck_bsop_date": days[i].Format("20060102"), "bstp_nmix_prpr": "1", "bstp_nmix_oprc": "1", "bstp_nmix_hgpr": "1", "bstp_nmix_lwpr": "1", "acml_vol": "1"})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"rt_cd": "0", "msg_cd": "MCA00000", "msg1": "ok", "output2": rows})
+	})
+	from, to := data.Date(2025, 9, 1), data.Date(2026, 9, 17)
+	bars, err := f.client.IndexBars(context.Background(), "kospi", from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := businessDays(from, to); len(bars) != len(want) || !bars[0].Date.Equal(from) {
+		t.Errorf("got %d bars from %v, want %d from %v (calls=%v)", len(bars), bars[0].Date, len(want), from, calls)
 	}
 }

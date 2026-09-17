@@ -32,7 +32,7 @@ type itemRow struct {
 // 기간을 종료일에서 거꾸로 140일씩 잘라 호출하고, 빈 응답을 받으면 멈춘다.
 func (c *Client) DailyBars(ctx context.Context, code string, from, to time.Time) ([]data.Bar, error) {
 	byDate := map[string]data.Bar{}
-	err := c.walkChunks(from, to, func(start, end time.Time) (int, error) {
+	err := c.walkChunks(from, to, func(start, end time.Time) (int, string, error) {
 		var resp struct {
 			Output2 []itemRow `json:"output2"`
 		}
@@ -45,7 +45,7 @@ func (c *Client) DailyBars(ctx context.Context, code string, from, to time.Time)
 			"FID_ORG_ADJ_PRC":        {"0"},
 		}
 		if err := c.get(ctx, itemChartPath, itemChartTrID, params, &resp); err != nil {
-			return 0, err
+			return 0, "", err
 		}
 		for _, r := range resp.Output2 {
 			if r.Close == "" || r.Open == "" {
@@ -53,11 +53,11 @@ func (c *Client) DailyBars(ctx context.Context, code string, from, to time.Time)
 			}
 			b, err := parseItemRow(r)
 			if err != nil {
-				return 0, fmt.Errorf("kis: %s %s: %w", code, r.Date, err)
+				return 0, "", fmt.Errorf("kis: %s %s: %w", code, r.Date, err)
 			}
 			byDate[r.Date] = b
 		}
-		return len(resp.Output2), nil
+		return len(resp.Output2), oldestDate(resp.Output2), nil
 	})
 	if err != nil {
 		return nil, err
@@ -66,21 +66,27 @@ func (c *Client) DailyBars(ctx context.Context, code string, from, to time.Time)
 }
 
 // walkChunks 는 to 에서 from 쪽으로 chunkCalendarDays 단위로 call 을 호출한다. call 이 0건을 돌려주면 멈춘다.
-func (c *Client) walkChunks(from, to time.Time, call func(start, end time.Time) (int, error)) error {
+// call 은 받은 행 수와 가장 오래된 행의 날짜(apiDateLayout)를 돌려주고, 다음 청크는 그 전날에서 시작한다 —
+// 서버가 청크보다 적게 돌려줘도(지수 API 는 50건) 빠지는 구간이 없도록.
+func (c *Client) walkChunks(from, to time.Time, call func(start, end time.Time) (int, string, error)) error {
 	end := to
 	for !end.Before(from) {
 		start := end.AddDate(0, 0, -(chunkCalendarDays - 1))
 		if start.Before(from) {
 			start = from
 		}
-		n, err := call(start, end)
+		n, oldest, err := call(start, end)
 		if err != nil {
 			return err
 		}
 		if n == 0 {
 			return nil
 		}
-		end = start.AddDate(0, 0, -1)
+		next := start
+		if d, err := time.ParseInLocation(apiDateLayout, oldest, data.KST); err == nil && d.After(start) && !d.After(end) {
+			next = d
+		}
+		end = next.AddDate(0, 0, -1)
 	}
 	return nil
 }
@@ -130,7 +136,7 @@ func (c *Client) IndexBars(ctx context.Context, market string, from, to time.Tim
 		return nil, fmt.Errorf("kis: unknown market %q", market)
 	}
 	byDate := map[string]data.IndexBar{}
-	err := c.walkChunks(from, to, func(start, end time.Time) (int, error) {
+	err := c.walkChunks(from, to, func(start, end time.Time) (int, string, error) {
 		var resp struct {
 			Output2 []indexRow `json:"output2"`
 		}
@@ -142,7 +148,7 @@ func (c *Client) IndexBars(ctx context.Context, market string, from, to time.Tim
 			"FID_PERIOD_DIV_CODE":    {"D"},
 		}
 		if err := c.get(ctx, indexChartPath, indexChartTrID, params, &resp); err != nil {
-			return 0, err
+			return 0, "", err
 		}
 		for _, r := range resp.Output2 {
 			if r.Close == "" {
@@ -150,11 +156,11 @@ func (c *Client) IndexBars(ctx context.Context, market string, from, to time.Tim
 			}
 			b, err := parseIndexRow(r)
 			if err != nil {
-				return 0, fmt.Errorf("kis: index %s %s: %w", market, r.Date, err)
+				return 0, "", fmt.Errorf("kis: index %s %s: %w", market, r.Date, err)
 			}
 			byDate[r.Date] = b
 		}
-		return len(resp.Output2), nil
+		return len(resp.Output2), oldestDate(resp.Output2), nil
 	})
 	if err != nil {
 		return nil, err
@@ -179,4 +185,18 @@ func parseIndexRow(r indexRow) (data.IndexBar, error) {
 		}
 	}
 	return data.IndexBar{Date: d, Open: vals[0], High: vals[1], Low: vals[2], Close: vals[3]}, nil
+}
+
+func (r itemRow) date() string  { return r.Date }
+func (r indexRow) date() string { return r.Date }
+
+// oldestDate 는 응답 행 중 가장 오래된 날짜(yyyymmdd). 행이 없으면 "".
+func oldestDate[R interface{ date() string }](rows []R) string {
+	oldest := ""
+	for _, r := range rows {
+		if d := r.date(); d != "" && (oldest == "" || d < oldest) {
+			oldest = d
+		}
+	}
+	return oldest
 }
