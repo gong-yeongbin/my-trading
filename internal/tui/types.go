@@ -58,6 +58,12 @@ type IndexMsg struct {
 	ChangePct float64
 }
 
+// IndexPrevCloseMsg 는 저장소의 지수 전일 종가. 실시간 값이 없을 때 "(전일)" 로 보인다.
+type IndexPrevCloseMsg struct {
+	Market string
+	Close  float64
+}
+
 type WatchMsg struct {
 	AsOf   string // "09-12"
 	Rows   []WatchRow

@@ -55,6 +55,9 @@ func (m Model) footerLeft() string {
 // fmtIndex 는 지수 한 칸. 값이 없을 때 연결은 되어 있으면 장외(데이터 대기), 아니면 미연결.
 func fmtIndex(q indexQuote, linkOK bool) string {
 	if !q.Connected {
+		if q.PrevClose > 0 {
+			return commaF(q.PrevClose) + " (전일)"
+		}
 		if linkOK {
 			return "연결됨 · 장외"
 		}

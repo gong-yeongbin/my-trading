@@ -77,27 +77,34 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		logger.With("kind", "연결").Warn("LS 앱키 없음, 실시간 뉴스·지수 미연결")
 	}
 
-	// 자동 일봉 수집: 앱키·DB 가 있으면 켤 때 따라잡고, 매일 daily_at 에 돈다.
-	fetchLog := logger.With("kind", "수집")
-	if err := cfg.RequireMarketKey(); err != nil {
-		fetchLog.Warn("자동 수집 비활성: " + err.Error())
-	} else if store, err := data.Open(cfg.DBPath); err != nil {
-		fetchLog.Error("자동 수집 비활성: DB 열기 실패", "err", err)
+	// 저장소: 관심종목 계산·자동 수집이 함께 쓴다. 앱키 유무와 무관하게 연다.
+	store, storeErr := data.Open(cfg.DBPath)
+	if storeErr != nil {
+		logger.With("kind", "지수").Error("DB 열기 실패 — 관심종목·자동 수집 비활성", "err", storeErr)
 	} else {
 		defer store.Close()
-		client := kis.New(cfg.KIS.MarketBaseURL(), cfg.KIS.Market.AppKey, cfg.KIS.Market.AppSecret, cfg.KIS.TokenCache, cfg.KIS.MarketRPS())
-		stale := func() (bool, error) {
-			last, has, err := store.LastIndexBarDate(ctx, "kospi")
-			if err != nil {
-				fetchLog.Warn("따라잡기 판정 실패", "err", err)
-				return false, err
+		screenLog := logger.With("kind", "지수")
+		go runScreen(ctx, cfg, store, screenLog, p.Send)
+
+		// 자동 일봉 수집: 앱키가 있으면 켤 때 따라잡고, 매일 daily_at 에 돈다.
+		fetchLog := logger.With("kind", "수집")
+		if err := cfg.RequireMarketKey(); err != nil {
+			fetchLog.Warn("자동 수집 비활성: " + err.Error())
+		} else {
+			client := kis.New(cfg.KIS.MarketBaseURL(), cfg.KIS.Market.AppKey, cfg.KIS.Market.AppSecret, cfg.KIS.TokenCache, cfg.KIS.MarketRPS())
+			stale := func() (bool, error) {
+				last, has, err := store.LastIndexBarDate(ctx, "kospi")
+				if err != nil {
+					fetchLog.Warn("따라잡기 판정 실패", "err", err)
+					return false, err
+				}
+				return app.Stale(last, has, time.Now()), nil
 			}
-			return app.Stale(last, has, time.Now()), nil
+			next := func(now time.Time) (time.Time, error) { return app.NextRun(now, cfg.Fetch.DailyAt) }
+			go fetchLoop(ctx, time.Now, stale, next, func(c context.Context) {
+				runFetchOnce(c, cfg, store, client, fetchLog, p.Send, func() { runScreen(c, cfg, store, screenLog, p.Send) })
+			})
 		}
-		next := func(now time.Time) (time.Time, error) { return app.NextRun(now, cfg.Fetch.DailyAt) }
-		go fetchLoop(ctx, time.Now, stale, next, func(c context.Context) {
-			runFetchOnce(c, cfg, store, client, fetchLog, p.Send)
-		})
 	}
 
 	go func() {

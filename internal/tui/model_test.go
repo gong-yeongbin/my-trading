@@ -256,3 +256,26 @@ func TestMarketStatusFromClockAndJIF(t *testing.T) {
 		t.Errorf("next day should fall back to clock:\n%s", m.View())
 	}
 }
+
+func TestIndexPrevCloseShownWhenDisconnected(t *testing.T) {
+	m := sized(t)
+	m = send(m, IndexPrevCloseMsg{Market: "kospi", Close: 2712.4})
+	if !strings.Contains(m.View(), "코스피 2,712.40 (전일)") {
+		t.Errorf("prev close should show when no live quote:\n%s", m.View())
+	}
+	m = send(m, ConnectedMsg{})
+	if !strings.Contains(m.View(), "코스피 2,712.40 (전일)") {
+		t.Errorf("prev close should still show while connected but no tick:\n%s", m.View())
+	}
+	m = send(m, IndexMsg{Market: "kospi", Value: 2720, ChangePct: 0.003})
+	if strings.Contains(m.View(), "(전일)") || !strings.Contains(m.View(), "2,720.00") {
+		t.Errorf("live quote should replace prev close:\n%s", m.View())
+	}
+	m = send(m, DisconnectedMsg{})
+	if !strings.Contains(m.View(), "코스피 2,712.40 (전일)") {
+		t.Errorf("after disconnect prev close should return:\n%s", m.View())
+	}
+	if !strings.Contains(m.View(), "코스닥 미연결") {
+		t.Errorf("kosdaq without prev close stays 미연결:\n%s", m.View())
+	}
+}

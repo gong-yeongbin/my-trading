@@ -47,8 +47,8 @@ func fetchLoop(ctx context.Context, clock func() time.Time, stale func() (bool, 
 	}
 }
 
-// runFetchOnce 는 app.RunFetch 를 한 번 돌리며 진행을 화면과 로그에 보낸다.
-func runFetchOnce(ctx context.Context, cfg *config.Config, store data.Store, src app.BarSource, logger *slog.Logger, send func(tea.Msg)) {
+// runFetchOnce 는 app.RunFetch 를 한 번 돌리며 진행을 화면과 로그에 보낸다. 취소가 아니면 끝에 onDone 을 부른다.
+func runFetchOnce(ctx context.Context, cfg *config.Config, store data.Store, src app.BarSource, logger *slog.Logger, send func(tea.Msg), onDone func()) {
 	logger.Info("자동 수집 시작", "server", "real")
 	send(FetchStatusMsg{Running: true})
 	started := time.Now()
@@ -71,5 +71,8 @@ func runFetchOnce(ctx context.Context, cfg *config.Config, store data.Store, src
 		logger.Info("자동 수집 건너뜀 (모든 종목 최신)")
 	default:
 		logger.Info("자동 수집 완료", "symbols", res.Symbols, "up_to_date", res.UpToDate, "bars", res.Bars, "failed", len(res.Failures), "elapsed", time.Since(started).Round(time.Second).String())
+	}
+	if err == nil && onDone != nil {
+		onDone()
 	}
 }

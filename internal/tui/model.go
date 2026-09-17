@@ -39,6 +39,7 @@ type indexQuote struct {
 	Value     float64
 	ChangePct float64
 	Connected bool
+	PrevClose float64
 }
 
 type tickMsg time.Time
@@ -108,9 +109,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		q := indexQuote{Value: msg.Value, ChangePct: msg.ChangePct, Connected: true}
 		switch msg.Market {
 		case "kospi":
+			q.PrevClose = m.kospi.PrevClose
 			m.kospi = q
 		case "kosdaq":
+			q.PrevClose = m.kosdaq.PrevClose
 			m.kosdaq = q
+		}
+	case IndexPrevCloseMsg:
+		switch msg.Market {
+		case "kospi":
+			m.kospi.PrevClose = msg.Close
+		case "kosdaq":
+			m.kosdaq.PrevClose = msg.Close
 		}
 	case WatchMsg:
 		m.watch = msg

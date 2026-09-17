@@ -19,6 +19,7 @@ import (
 	"github.com/gong-yeongbin/my-trading/internal/kis"
 	"github.com/gong-yeongbin/my-trading/internal/logfile"
 	"github.com/gong-yeongbin/my-trading/internal/ls"
+	"github.com/gong-yeongbin/my-trading/internal/screener"
 	"github.com/gong-yeongbin/my-trading/internal/tui"
 )
 
@@ -27,7 +28,7 @@ const usage = `사용법:
   trader ls-probe [초]   LS 실시간 이벤트를 N초(기본 30) 동안 출력 (연결 확인용)
   trader universe        마스터 파일로 종목 목록 갱신
   trader fetch [--from YYYY-MM-DD]   지수·종목 일봉 증분 수집
-  trader watch           (7단계 계획에서 구현)
+  trader watch           전일 데이터 기준 관심 종목 표 출력
 `
 
 func main() {
@@ -59,7 +60,7 @@ func run(args []string) error {
 	case "fetch":
 		return runFetch(ctx, cfg, args[1:])
 	case "watch":
-		return fmt.Errorf("%s 는 아직 구현되지 않았습니다 (7단계)", args[0])
+		return runWatch(ctx, cfg)
 	default:
 		fmt.Print(usage)
 		return fmt.Errorf("알 수 없는 명령 %q", args[0])
@@ -209,5 +210,29 @@ func runFetch(ctx context.Context, cfg *config.Config, args []string) error {
 		fmt.Printf("  실패 %s: %v\n", f.Code, f.Err)
 	}
 	logger.Info("일봉 수집 완료", "symbols", res.Symbols, "bars", res.Bars, "failed", len(res.Failures), "elapsed", elapsed.String())
+	return nil
+}
+
+// runWatch 는 저장소만 읽어 관심종목 표를 출력한다. 네트워크를 쓰지 않는다.
+func runWatch(ctx context.Context, cfg *config.Config) error {
+	store, err := data.Open(cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	res, err := screener.Run(ctx, cfg, store)
+	if err != nil {
+		return err
+	}
+	if res.AsOf.IsZero() {
+		fmt.Println("지수 봉이 없습니다. 먼저 fetch 를 실행하세요.")
+		return nil
+	}
+	fmt.Printf("기준일 %s  코스피 %s · 코스닥 %s  관심종목 %d개\n", res.AsOf.Format("2006-01-02"), res.Filter["kospi"], res.Filter["kosdaq"], len(res.Items))
+	fmt.Printf("%-8s %-16s %-6s %10s %10s %8s %12s\n", "코드", "종목명", "시장", "전일종가", "필요종가", "필요상승", "필요거래량")
+	// %-16s 는 한글 폭을 못 맞추지만 CLI 는 참고용이라 그대로 둔다.
+	for _, it := range res.Items {
+		fmt.Printf("%-8s %-16s %-6s %10d %10d %7.1f%% %12d\n", it.Code, it.Name, it.Market, it.PrevClose, it.MinClose, it.MinChangePct*100, it.MinVolume)
+	}
 	return nil
 }

@@ -100,7 +100,7 @@ func TestRunFetchOnceFetchesThroughYesterday(t *testing.T) {
 	var msgs []tea.Msg
 	send := func(m tea.Msg) { msgs = append(msgs, m) }
 
-	runFetchOnce(ctx, cfg, store, src, logger, send)
+	runFetchOnce(ctx, cfg, store, src, logger, send, nil)
 
 	now := time.Now().In(data.KST)
 	yesterday := data.Date(now.Year(), now.Month(), now.Day()).AddDate(0, 0, -1)
