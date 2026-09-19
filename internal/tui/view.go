@@ -183,10 +183,10 @@ func (m Model) holdingsPanel(w int) (string, []column, [][]string) {
 	if !h.Connected {
 		return " 보유종목  미연결", cols, nil
 	}
-	if len(h.Rows) == 0 {
-		return " 보유종목  보유 없음", cols, nil
-	}
 	s := h.Summary
+	if len(h.Rows) == 0 {
+		return spread(" 보유종목  보유 없음", fmt.Sprintf("현금 %s ", comma(s.Cash)), w), cols, nil
+	}
 	title := spread(fmt.Sprintf(" 보유종목  (%d종목)", len(h.Rows)),
 		fmt.Sprintf("평가금액 %s   손익 %s (%s)   현금 %s ", comma(s.Total), signed(s.PnL), pct(s.PnLPct), comma(s.Cash)), w)
 	body := make([][]string, len(h.Rows))

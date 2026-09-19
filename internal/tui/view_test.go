@@ -69,9 +69,9 @@ func TestViewHoldingsPanel(t *testing.T) {
 	if !strings.Contains(m.View(), "보유종목  미연결") {
 		t.Errorf("holdings should show 미연결 before data:\n%s", m.View())
 	}
-	m = send(m, HoldingsMsg{Connected: true})
-	if !strings.Contains(m.View(), "보유 없음") {
-		t.Errorf("empty holdings should show 보유 없음:\n%s", m.View())
+	m = send(m, HoldingsMsg{Connected: true, Summary: HoldingsSummary{Cash: 7520000}})
+	if v := m.View(); !strings.Contains(v, "보유 없음") || !strings.Contains(v, "현금 7,520,000") {
+		t.Errorf("empty holdings should show 보유 없음 and 현금:\n%s", v)
 	}
 	m = send(m, HoldingsMsg{Connected: true,
 		Summary: HoldingsSummary{Total: 12480000, PnL: 312000, PnLPct: 0.026, Cash: 7520000},
