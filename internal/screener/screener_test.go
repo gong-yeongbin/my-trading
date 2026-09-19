@@ -220,3 +220,57 @@ func TestRunWithoutIndexReturnsEmpty(t *testing.T) {
 		t.Errorf("empty store: %+v %v", res, err)
 	}
 }
+
+func TestRunExcludesBlockedMarketAndCheapAndSortsByTurnover(t *testing.T) {
+	ctx := context.Background()
+	store, err := data.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	c := &config.Config{Universe: config.UniverseConfig{Markets: []string{"kospi", "kosdaq"}}, Strategy: cfg()}
+	c.Strategy.MinPrice = 1000
+	syms := []data.Symbol{{Code: "K1", Name: "작은거래", Market: "kospi"}, {Code: "K2", Name: "큰거래", Market: "kospi"}, {Code: "C", Name: "동전주", Market: "kospi"}, {Code: "D", Name: "코스닥", Market: "kosdaq"}}
+	if err := store.UpsertSymbols(ctx, syms); err != nil {
+		t.Fatal(err)
+	}
+	flat := func(close, vol int64) []data.Bar {
+		out := make([]data.Bar, 60)
+		for i := range out {
+			out[i] = data.Bar{Date: data.Date(2026, 1, 1).AddDate(0, 0, i), Open: close, High: close, Low: close, Close: close, Volume: vol}
+		}
+		return out
+	}
+	for code, bars := range map[string][]data.Bar{"K1": flat(10_000, 1_000_000), "K2": flat(10_000, 5_000_000), "C": flat(900, 100_000_000), "D": flat(10_000, 9_000_000)} {
+		if err := store.UpsertBars(ctx, code, bars); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idx := func(last float64) []data.IndexBar {
+		out := make([]data.IndexBar, 60)
+		for i := range out {
+			out[i] = data.IndexBar{Date: data.Date(2026, 1, 1).AddDate(0, 0, i), Close: 1000}
+		}
+		out[59].Close = last
+		return out
+	}
+	if err := store.UpsertIndexBars(ctx, "kospi", idx(1001)); err != nil { // 진입가능
+		t.Fatal(err)
+	}
+	if err := store.UpsertIndexBars(ctx, "kosdaq", idx(999)); err != nil { // 차단
+		t.Fatal(err)
+	}
+	res, err := Run(ctx, c, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Filter["kosdaq"] != "차단" {
+		t.Fatalf("filter = %v", res.Filter)
+	}
+	if len(res.Items) != 2 || res.Items[0].Code != "K2" || res.Items[1].Code != "K1" {
+		t.Fatalf("items = %+v (want K2, K1: 거래대금 큰 순, 차단 시장·1000원 미만 제외)", res.Items)
+	}
+	if res.Items[0].AvgTurnover != 50_000_000_000 || res.Items[1].AvgTurnover != 10_000_000_000 {
+		t.Errorf("AvgTurnover = %d, %d", res.Items[0].AvgTurnover, res.Items[1].AvgTurnover)
+	}
+}

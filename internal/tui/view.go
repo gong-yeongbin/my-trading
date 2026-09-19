@@ -169,10 +169,10 @@ func (m Model) watchPanel(w int) (string, []column, [][]string) {
 	}
 	title := spread(fmt.Sprintf(" 관심종목  (%s 기준, %d개)", asOf, len(m.watch.Rows)),
 		fmt.Sprintf("코스피 %s · 코스닥 %s ", f.Kospi, f.Kosdaq), w)
-	cols := []column{{"종목명", 16, false}, {"시장", 6, false}, {"전일종가", 10, true}, {"필요종가", 10, true}, {"필요상승", 8, true}, {"필요거래량", 12, true}}
+	cols := []column{{"종목명", 16, false}, {"시장", 6, false}, {"전일종가", 10, true}, {"필요종가", 10, true}, {"필요상승", 8, true}, {"필요거래량", 12, true}, {"거래대금(억)", 12, true}}
 	body := make([][]string, len(m.watch.Rows))
 	for i, r := range m.watch.Rows {
-		body[i] = []string{r.Name, r.Market, comma(r.PrevClose), comma(r.MinClose), pct(r.MinChangePct), comma(r.MinVolume)}
+		body[i] = []string{r.Name, r.Market, comma(r.PrevClose), comma(r.MinClose), pct(r.MinChangePct), comma(r.MinVolume), comma(r.AvgTurnover / 100_000_000)}
 	}
 	return title, cols, body
 }

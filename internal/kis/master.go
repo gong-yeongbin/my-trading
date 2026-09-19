@@ -16,7 +16,7 @@ import (
 const DefaultMasterBaseURL = "https://new.real.download.dws.co.kr"
 
 // KnownFlags 는 config universe.exclude_flags 에 쓸 수 있는 이름이다.
-var KnownFlags = []string{"거래정지", "정리매매", "관리종목", "시장경고", "단기과열", "이상급등", "SPAC"}
+var KnownFlags = []string{"거래정지", "정리매매", "관리종목", "시장경고", "단기과열", "이상급등", "SPAC", "우선주"}
 
 type MasterRow struct {
 	Code         string
@@ -30,6 +30,7 @@ type MasterRow struct {
 	OverheatCode string // 단기과열: 0 정상
 	Surge        bool   // 이상급등
 	Spac         bool
+	Preferred    bool // 우선주 (마스터 우선주 구분 0=보통주, 1 구형, 2 신형, 9 기타)
 }
 
 func (r MasterRow) FlagOn(flag string) (bool, error) {
@@ -48,6 +49,8 @@ func (r MasterRow) FlagOn(flag string) (bool, error) {
 		return r.Surge, nil
 	case "SPAC":
 		return r.Spac, nil
+	case "우선주":
+		return r.Preferred, nil
 	}
 	return false, fmt.Errorf("kis: unknown flag %q (known: %s)", flag, strings.Join(KnownFlags, ", "))
 }
@@ -142,6 +145,7 @@ func parseMasterLine(line, market string, layout masterLayout) (MasterRow, error
 		OverheatCode: fields["단기과열"],
 		Surge:        fields["이상급등"] == "Y",
 		Spac:         fields["SPAC"] == "Y",
+		Preferred:    strings.TrimSpace(fields["우선주"]) != "0",
 	}, nil
 }
 

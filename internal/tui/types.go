@@ -15,6 +15,7 @@ type WatchRow struct {
 	MinClose     int64
 	MinChangePct float64 // 0.031 = +3.1%
 	MinVolume    int64
+	AvgTurnover  int64 // 평균 거래대금 (원)
 }
 
 // MarketFilter 는 시장별 진입 가능 여부 문구: "진입가능", "차단", "알 수 없음".

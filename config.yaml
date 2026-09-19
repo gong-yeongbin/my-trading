@@ -19,7 +19,7 @@ log:
 universe:
   markets: [kospi, kosdaq]
   group_codes: [ST]
-  exclude_flags: [거래정지, 정리매매, 관리종목, 시장경고, 단기과열, 이상급등, SPAC]
+  exclude_flags: [거래정지, 정리매매, 관리종목, 시장경고, 단기과열, 이상급등, SPAC, 우선주]
 
 fetch:
   start_date: "2025-09-01"     # 1차(선별 전용): 60일선용 1년치. 백테스트 시 2021-01-01 로 되돌리고 봉을 비운 뒤 재수집
@@ -36,3 +36,4 @@ strategy:
   ma_short_days: 20
   ma_long_days: 60
   new_high_days: 20
+  min_price: 1000              # 전일 종가가 이 값 미만이면 관심종목 제외

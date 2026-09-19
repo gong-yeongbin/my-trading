@@ -21,17 +21,19 @@ type WatchItem struct {
 	MinChangePct       float64          // C_min / P − 1
 	MinTurnover        int64            // T_req
 	MinVolume          int64            // T_req / C_min (올림)
+	AvgTurnover        int64            // 최근 turnover_ma_days 평균 거래대금 (정렬키)
 	Thresholds         map[string]int64 // 조건별 하한: change_min, new_high, ma_short, ma_long
 }
 
-// Compute 는 전일까지의 봉(과거→현재)으로 문턱값을 계산한다. 봉이 ma_long_days 개 미만이거나 실현 불가능하면 false.
+// Compute 는 전일까지의 봉(과거→현재)으로 문턱값을 계산한다. 봉이 ma_long_days 개 미만이거나, 전일 종가가 min_price 미만이거나,
+// 실현 불가능하면 false.
 func Compute(cfg config.StrategyConfig, sym data.Symbol, bars []data.Bar) (WatchItem, bool) {
 	n, m, k, h := cfg.MAShortDays, cfg.MALongDays, cfg.TurnoverMADays, cfg.NewHighDays
 	if n <= 1 || m <= n || k <= 0 || h <= 0 || len(bars) < m || len(bars) < k || len(bars) < h {
 		return WatchItem{}, false
 	}
 	p := bars[len(bars)-1].Close
-	if p <= 0 {
+	if p <= 0 || p < cfg.MinPrice {
 		return WatchItem{}, false
 	}
 	sumN, sumM := sumClose(bars, n-1), sumClose(bars, m-1)
@@ -64,6 +66,7 @@ func Compute(cfg config.StrategyConfig, sym data.Symbol, bars []data.Bar) (Watch
 		MinChangePct: float64(cmin)/float64(p) - 1,
 		MinTurnover:  treq,
 		MinVolume:    int64(math.Ceil(float64(treq) / float64(cmin))),
+		AvgTurnover:  int64(math.Round(avgT)),
 		Thresholds:   th,
 	}, true
 }
@@ -82,7 +85,7 @@ func FilterStatus(cfg config.StrategyConfig, bars []data.IndexBar) string {
 // Result 는 Run 의 출력.
 type Result struct {
 	AsOf   time.Time         // 기준일 = 코스피 지수 마지막 봉 날짜. 지수가 없으면 zero
-	Items  []WatchItem       // MinChangePct 오름차순, 같으면 코드 오름차순
+	Items  []WatchItem       // 평균 거래대금 내림차순, 같으면 코드 오름차순. 차단된 시장의 종목은 없다
 	Filter map[string]string // 시장별 필터 상태
 }
 
@@ -120,6 +123,9 @@ func Run(ctx context.Context, cfg *config.Config, store data.Store) (Result, err
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
+		if res.Filter[s.Market] == "차단" {
+			continue
+		}
 		bars, err := store.LoadBars(ctx, s.Code, from, asOf)
 		if err != nil {
 			return res, err
@@ -132,8 +138,8 @@ func Run(ctx context.Context, cfg *config.Config, store data.Store) (Result, err
 		}
 	}
 	sort.Slice(res.Items, func(i, j int) bool {
-		if res.Items[i].MinChangePct != res.Items[j].MinChangePct {
-			return res.Items[i].MinChangePct < res.Items[j].MinChangePct
+		if res.Items[i].AvgTurnover != res.Items[j].AvgTurnover {
+			return res.Items[i].AvgTurnover > res.Items[j].AvgTurnover
 		}
 		return res.Items[i].Code < res.Items[j].Code
 	})

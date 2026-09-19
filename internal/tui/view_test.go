@@ -52,10 +52,10 @@ func TestViewHeaderAndFooter(t *testing.T) {
 func TestViewWatchPanel(t *testing.T) {
 	m := sized(t)
 	m = send(m, WatchMsg{AsOf: "09-12", Filter: MarketFilter{Kospi: "진입가능", Kosdaq: "차단"}, Rows: []WatchRow{
-		{Name: "삼성전자", Market: "코스피", PrevClose: 71200, MinClose: 73400, MinChangePct: 0.031, MinVolume: 2140000},
+		{Name: "삼성전자", Market: "코스피", PrevClose: 71200, MinClose: 73400, MinChangePct: 0.031, MinVolume: 2140000, AvgTurnover: 1_234_567_890_123},
 	}})
 	v := m.View()
-	for _, want := range []string{"관심종목  (09-12 기준, 1개)", "코스피 진입가능 · 코스닥 차단", "종목명", "필요거래량", "삼성전자", "71,200", "73,400", "+3.1%", "2,140,000"} {
+	for _, want := range []string{"관심종목  (09-12 기준, 1개)", "코스피 진입가능 · 코스닥 차단", "종목명", "필요거래량", "삼성전자", "71,200", "73,400", "+3.1%", "2,140,000", "거래대금(억)", "12,345"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)
 		}

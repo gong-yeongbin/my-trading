@@ -24,7 +24,7 @@ func watchMsgFrom(res screener.Result) WatchMsg {
 		if name == "" {
 			name = it.Market
 		}
-		msg.Rows = append(msg.Rows, WatchRow{Name: it.Name, Market: name, PrevClose: it.PrevClose, MinClose: it.MinClose, MinChangePct: it.MinChangePct, MinVolume: it.MinVolume})
+		msg.Rows = append(msg.Rows, WatchRow{Name: it.Name, Market: name, PrevClose: it.PrevClose, MinClose: it.MinClose, MinChangePct: it.MinChangePct, MinVolume: it.MinVolume, AvgTurnover: it.AvgTurnover})
 	}
 	return msg
 }

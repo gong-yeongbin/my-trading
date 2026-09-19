@@ -142,7 +142,7 @@ func runUniverse(ctx context.Context, cfg *config.Config) error {
 		logger.Error("유니버스 갱신 실패", "err", err)
 		return err
 	}
-	fmt.Printf("마스터 %d 종목 중 %d 종목 저장", res.Downloaded, res.Kept)
+	fmt.Printf("마스터 %d 종목 중 %d 종목 저장, %d 종목 제외 삭제", res.Downloaded, res.Kept, res.Dropped)
 	logArgs := []any{"downloaded", res.Downloaded, "kept", res.Kept}
 	for _, m := range cfg.Universe.Markets {
 		fmt.Printf("  %s %d", m, res.ByMarket[m])
@@ -229,10 +229,10 @@ func runWatch(ctx context.Context, cfg *config.Config) error {
 		return nil
 	}
 	fmt.Printf("기준일 %s  코스피 %s · 코스닥 %s  관심종목 %d개\n", res.AsOf.Format("2006-01-02"), res.Filter["kospi"], res.Filter["kosdaq"], len(res.Items))
-	fmt.Printf("%-8s %-16s %-6s %10s %10s %8s %12s\n", "코드", "종목명", "시장", "전일종가", "필요종가", "필요상승", "필요거래량")
+	fmt.Printf("%-8s %-16s %-6s %10s %10s %8s %12s %12s\n", "코드", "종목명", "시장", "전일종가", "필요종가", "필요상승", "필요거래량", "거래대금(억)")
 	// %-16s 는 한글 폭을 못 맞추지만 CLI 는 참고용이라 그대로 둔다.
 	for _, it := range res.Items {
-		fmt.Printf("%-8s %-16s %-6s %10d %10d %7.1f%% %12d\n", it.Code, it.Name, it.Market, it.PrevClose, it.MinClose, it.MinChangePct*100, it.MinVolume)
+		fmt.Printf("%-8s %-16s %-6s %10d %10d %7.1f%% %12d %12d\n", it.Code, it.Name, it.Market, it.PrevClose, it.MinClose, it.MinChangePct*100, it.MinVolume, it.AvgTurnover/100_000_000)
 	}
 	return nil
 }

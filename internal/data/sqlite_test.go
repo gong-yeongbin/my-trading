@@ -33,6 +33,20 @@ func TestSymbolsUpsert(t *testing.T) {
 	if len(got) != 2 || got[0].Code != "005930" || got[0].Name != "삼성전자(개명)" || got[1].Code != "247540" {
 		t.Errorf("ListSymbols = %+v", got)
 	}
+	// 삭제해도 봉은 남는다. 없는 코드는 무시.
+	if err := s.UpsertBars(ctx, "247540", []Bar{{Date: Date(2024, 9, 3), Open: 1, High: 1, Low: 1, Close: 1, Volume: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteSymbols(ctx, []string{"247540", "없음"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.ListSymbols(ctx)
+	if len(got) != 1 || got[0].Code != "005930" {
+		t.Errorf("after delete = %+v", got)
+	}
+	if _, ok, _ := s.LastBarDate(ctx, "247540"); !ok {
+		t.Error("bars should survive symbol delete")
+	}
 }
 
 func TestBarsRoundTrip(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 type Store interface {
 	UpsertSymbols(ctx context.Context, syms []Symbol) error
 	ListSymbols(ctx context.Context) ([]Symbol, error)
+	DeleteSymbols(ctx context.Context, codes []string) error // 봉 이력은 남긴다
 
 	LastBarDate(ctx context.Context, code string) (time.Time, bool, error)
 	UpsertBars(ctx context.Context, code string, bars []Bar) error

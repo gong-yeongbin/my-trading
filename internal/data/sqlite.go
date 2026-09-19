@@ -82,6 +82,17 @@ func (s *SQLiteStore) UpsertSymbols(ctx context.Context, syms []Symbol) error {
 	})
 }
 
+func (s *SQLiteStore) DeleteSymbols(ctx context.Context, codes []string) error {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		for _, code := range codes {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM symbols WHERE code = ?`, code); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (s *SQLiteStore) ListSymbols(ctx context.Context) ([]Symbol, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT code, name, market FROM symbols ORDER BY code`)
 	if err != nil {

@@ -53,15 +53,17 @@ func TestRunUniverseFilters(t *testing.T) {
 		},
 	}}
 	store := openStore(t)
+	// 이전 실행에서 저장된 종목: KR모터스는 이번에 관리종목이라 삭제, 옛날종목은 마스터에 없으니 보존(봉 이력)
+	store.UpsertSymbols(context.Background(), []data.Symbol{{Code: "000040", Name: "KR모터스", Market: "kospi"}, {Code: "999999", Name: "옛날종목", Market: "kospi"}})
 	res, err := RunUniverse(context.Background(), testConfig(), store, src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	syms, _ := store.ListSymbols(context.Background())
-	if len(syms) != 2 || syms[0].Code != "005930" || syms[1].Code != "247540" || syms[1].Market != "kosdaq" {
+	if len(syms) != 3 || syms[0].Code != "005930" || syms[1].Code != "247540" || syms[1].Market != "kosdaq" || syms[2].Code != "999999" {
 		t.Errorf("symbols = %+v", syms)
 	}
-	if res.Downloaded != 5 || res.Kept != 2 || res.ByMarket["kospi"] != 1 || res.ByMarket["kosdaq"] != 1 {
+	if res.Downloaded != 5 || res.Kept != 2 || res.Dropped != 1 || res.ByMarket["kospi"] != 1 || res.ByMarket["kosdaq"] != 1 {
 		t.Errorf("result = %+v", res)
 	}
 }

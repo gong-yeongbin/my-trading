@@ -103,6 +103,7 @@ type StrategyConfig struct {
 	MAShortDays      int     `yaml:"ma_short_days"`
 	MALongDays       int     `yaml:"ma_long_days"`
 	NewHighDays      int     `yaml:"new_high_days"`
+	MinPrice         int64   `yaml:"min_price"` // 전일 종가가 이 값 미만이면 관심종목에서 제외 (0 이면 제한 없음)
 }
 
 // legacyKISEnv 는 구 config.yaml 의 kis.env 값을 읽기 위한 임시 구조. trade_env 가 없을 때만 마이그레이션에 쓴다.
@@ -166,6 +167,9 @@ func (c *Config) Validate() error {
 	}
 	if c.KIS.TokenCache == "" {
 		errs = append(errs, errors.New("kis.token_cache is required"))
+	}
+	if c.Strategy.MinPrice < 0 {
+		errs = append(errs, errors.New("strategy.min_price must be >= 0"))
 	}
 	if c.KIS.RequestsPerSecond < 0 {
 		errs = append(errs, errors.New("kis.requests_per_second must be >= 0"))
